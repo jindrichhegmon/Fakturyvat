@@ -207,7 +207,7 @@
     <p class="napoveda" style="margin-top:14px">Náhled výsledku vpravo v části Náhled se přepisuje sám při každé úpravě. Stažený soubor se jmenuje <em>název-upraveno.pdf</em>, originál zůstane beze změny.</p>
   </section>
 </main>
-<footer>Faktury – přepsání odběratele · v1.4 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
+<footer>Faktury – přepsání odběratele · v1.5 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
 
 <script>
 (function () {
@@ -262,7 +262,7 @@
   // řádky, kterými blok adresy končí
   const RE_KONEC = new RegExp('^(i[čc]o?' + K + '|i[čc]:|di[čc]' + K + '|i[čc]\\s*dph|vat' + K + '|ust[-\\s]?id|tax\\s*id|datum' + K + '|date' + K + '|variabiln|vs' + K + '|konstantn|platba|splatnost|due' + K + '|objedn|order' + K + '|tel\\.?' + K + '|telefon|phone|e-?mail|www\\.|fax' + K + '|banka|bankovn|bank' + K + '|účet|ucet|iban' + K + '|dodavatel|supplier|faktura' + K + '|invoice' + K + '|číslo|cislo|strana' + K + '|page' + K + '|zp[ůu]sob|forma' + K + ')', 'i');
   // popisek DIČ (DIČ, IČ DPH, VAT, VAT ID, USt-IdNr, Tax ID) – s hranicemi slova, aby „překontrolovat“ nebylo VAT
-  const RE_DIC = new RegExp(Z + '(di[čc]|i[čc]\\s*dph|vat(\\s*(id|no\\.?|number|reg\\.?(istration)?))?|ust[-\\s]?idnr?|tax\\s*id|umsatzsteuer)' + K, 'i');
+  const RE_DIC = new RegExp(Z + '(di[čc]|i[čc]\\s*dph|vat(\\s*(id|no\\.?|number|reg\\.?(istration)?))?|ust[-\\s]?idnr?|tax\\s*id|umsatzsteuer|cif(\\s*\\/\\s*nif)?|nif|n\\.i\\.f\\.|partita\\s*iva|p\\.\\s*iva|tva|btw)' + K, 'i');
   // popisek IČO (ne „IČ DPH“, to je slovenské DIČ)
   const RE_ICO = new RegExp(Z + '(i[čc]o?|reg\\.?\\s*(no|č)\\.?|company\\s*(id|no\\.?)|id\\.?\\s*no\\.?|id)(?!\\s*dph)' + K, 'i');
   const POLE = { ico: { re: RE_ICO, nazev: 'IČO', ne: RE_DIC }, dic: { re: RE_DIC, nazev: 'DIČ', ne: null } };
@@ -458,6 +458,25 @@
         if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text)) break;
         stav.adresa.push(i);
         posledniY = r.y; posledniSize = r.size;
+      }
+    }
+
+    // 2b) bez popisku: blok adresy = řádky těsně nad řádkem s DIČ (nebo IČO) ve stejném sloupci
+    if (!stav.adresa.length) {
+      const kotvy = radky.map((r, i) => ({ r, i })).filter(({ r }) => RE_DIC.test(r.text) || RE_ICO.test(r.text));
+      const kotva = kotvy.length > 1 ? kotvy[kotvy.length - 1] : kotvy[0]; // první bývá dodavatel
+      if (kotva) {
+        const nad = [];
+        let posl = kotva.r;
+        for (let i = kotva.i - 1; i >= 0 && nad.length < 7; i--) {
+          const r = radky[i];
+          if (r.y <= posl.y + 0.5) continue;                         // stejná linka
+          if (Math.abs(r.x - kotva.r.x) > 40) continue;              // jiný sloupec
+          if (r.y - posl.y > Math.max(r.size, posl.size) * 3.4) break; // velká mezera
+          if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text) || RE_DODAVATEL.test(r.text)) break;
+          nad.unshift(i); posl = r;
+        }
+        if (nad.length >= 2) stav.adresa = nad;
       }
     }
 
@@ -722,14 +741,23 @@
     // 5) adresa delší než původní: další řádky pod poslední původní
     if (puv.length && noveRadky.length > puv.length) {
       const zakl = vlastniVelikost > 0 ? vlastniVelikost : puv[0].size;
-      const krok = puv.length > 1 ? Math.max(zakl * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : zakl * 1.25;
+      const posl = puv[puv.length - 1];
+      let krok = zakl * 1.3;
+      if (puv.length > 1) krok = Math.max(zakl * 1.05, (puv[0].y - posl.y) / (puv.length - 1));
+      else { // rozteč podle nejbližšího řádku pod blokem ve stejném sloupci
+        const pod = stav.radky.filter((r) => r.y < posl.y - 1 && Math.abs(r.x - posl.x) < 40 && posl.y - r.y < zakl * 3).sort((a, b) => b.y - a.y)[0];
+        if (pod) krok = posl.y - pod.y;
+      }
+      const kolize = [];
       for (let k = puv.length; k < noveRadky.length; k++) {
-        const y = puv[puv.length - 1].y - krok * (k - puv.length + 1);
-        const size = velikost({ ...puv[puv.length - 1], y }, noveRadky[k], fRegular);
+        const y = posl.y - krok * (k - puv.length + 1);
+        const size = velikost({ ...posl, y }, noveRadky[k], fRegular);
         const w = fRegular.widthOfTextAtSize(noveRadky[k], size);
-        zabil(puv[0].x, y, w, size);
+        const prekaz = stav.radky.find((r) => !nahrady.has(r) && Math.abs(r.y - y) < Math.max(r.size, size) * 0.7 && r.x < puv[0].x + w && r.x + r.w > puv[0].x);
+        if (prekaz) kolize.push('„' + noveRadky[k] + '“ přes „' + prekaz.text + '“');
         page.drawText(noveRadky[k], { x: puv[0].x, y, size, font: fRegular, color: cerna });
       }
+      if (kolize.length) varovani.push('Nová adresa má víc řádků než označený blok (' + puv.length + '), další řádky se překrývají s textem: ' + kolize.join(', ') + '. Označte v originálu i zbylé řádky adresy (režim „řádek adresy“).');
     }
 
     return { bytes: await doc.save(), odstraneno, neodstraneno, varovani };

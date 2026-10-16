@@ -5,9 +5,13 @@ všechny údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
 
 - Všechno běží **jen v prohlížeči** – faktura se nikam neodesílá, žádný server, databáze ani Make.
 - Adresa se hledá podle popisku (Odběratel, Kupující, Zákazník, Příjemce, Bill to, Customer …),
-  IČO a DIČ podle popisku (IČO / IČ, DIČ / VAT ID / IČ DPH) nejblíž pod adresou (údaje dodavatele se přeskočí).
+  IČO a DIČ podle popisku (IČO / IČ / ID, DIČ / VAT ID / IČ DPH / CIF/NIF / NIF / USt-IdNr) nejblíž pod adresou
+  (údaje dodavatele se přeskočí). Faktura bez popisku odběratele (např. španělská): blok adresy = řádky těsně nad
+  řádkem s DIČ ve stejném sloupci.
   Řádek s IČO a DIČ se přepíše celý (popisek + nová hodnota); prázdné pole řádek z faktury odstraní.
   Když je DIČ na faktuře víckrát (DIČ i IČ DPH), přepíšou se všechny řádky v bloku odběratele.
+- Když má nová adresa víc řádků než označený blok, další řádky se napíšou pod něj; pokud by se překryly
+  s jiným textem, stránka upozorní a je třeba označit i zbylé řádky původní adresy.
 - Řádky zarovnané mezerami (Alza apod.): jeden příkaz v PDF nese celý řádek. Odstraní se celý a části, které se
   nemění (popisky, data vlevo), se napíšou znovu na původní místo.
 - Když se blok najde špatně, řádky se označí kliknutím v náhledu (režim „řádek adresy“ / „řádek s IČO“ / „řádek s DIČ“).
