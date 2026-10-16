@@ -7,6 +7,9 @@ všechny údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
 - Adresa se hledá podle popisku (Odběratel, Kupující, Zákazník, Příjemce, Bill to, Customer …),
   IČO a DIČ podle popisku (IČO / IČ, DIČ / VAT ID / IČ DPH) nejblíž pod adresou (údaje dodavatele se přeskočí).
   Řádek s IČO a DIČ se přepíše celý (popisek + nová hodnota); prázdné pole řádek z faktury odstraní.
+  Když je DIČ na faktuře víckrát (DIČ i IČ DPH), přepíšou se všechny řádky v bloku odběratele.
+- Řádky zarovnané mezerami (Alza apod.): jeden příkaz v PDF nese celý řádek. Odstraní se celý a části, které se
+  nemění (popisky, data vlevo), se napíšou znovu na původní místo.
 - Když se blok najde špatně, řádky se označí kliknutím v náhledu (režim „řádek adresy“ / „řádek s IČO“ / „řádek s DIČ“).
 - Původní text se z obsahu PDF **odstraní** (textové operátory se nahradí posunem stejné šířky, viz
   `public/prepis-obsahu.js`), ne jen překryje – v novém souboru nejde označit ani vytěžit.

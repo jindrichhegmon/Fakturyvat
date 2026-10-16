@@ -158,12 +158,18 @@ window.FKObsah = (function () {
   const I = [1, 0, 0, 1, 0, 0];
   const fmt = (v) => (Math.round(v * 1000) / 1000).toString();
 
-  // index oblasti, ve které textový operátor začíná (-1 = žádná)
-  function vOblasti(oblasti, x, y) {
-    return oblasti.findIndex((o) => y > o.y - o.size * 0.45 && y < o.y + o.size * 0.55 && x > o.x - 2.5 && x < o.x + o.w - 0.5);
+  // indexy všech oblastí, do kterých textový operátor zasahuje: začíná v ní, nebo se s ní na stejném účaří překrývá
+  function vOblasti(oblasti, x0, x1, y) {
+    const a = Math.min(x0, x1), b = Math.max(x0, x1);
+    const idx = [];
+    oblasti.forEach((o, i) => {
+      if (y > o.y - o.size * 0.45 && y < o.y + o.size * 0.55
+        && ((x0 > o.x - 2.5 && x0 < o.x + o.w - 0.5) || (Math.min(b, o.x + o.w) - Math.max(a, o.x) > Math.max(1, o.size * 0.3)))) idx.push(i);
+    });
+    return idx;
   }
 
-  async function zpracujProud(doc, bytes, resources, ctm0, oblasti, cache, navstivene, pocty) {
+  async function zpracujProud(doc, bytes, resources, ctm0, oblasti, cache, navstivene, pocty, odstranene) {
     const tokeny = tokenizuj(bytes);
     const ctx = doc.context;
     let ctm = ctm0.slice(); const zasobnik = [];
@@ -219,7 +225,7 @@ window.FKObsah = (function () {
                 const m = mtx instanceof PDFArray ? mtx.asArray().map((x) => { const v = ctx.lookup(x); return v instanceof PDFNumber ? v.asNumber() : 0; }) : I;
                 const res = ctx.lookupMaybe(xo.dict.get(PDFName.of('Resources')), PDFDict) || resources;
                 const data = decodePDFRawStream(xo).decode();
-                const r = await zpracujProud(doc, data, res, mul(m, ctm), oblasti, cache, navstivene, pocty);
+                const r = await zpracujProud(doc, data, res, mul(m, ctm), oblasti, cache, navstivene, pocty, odstranene);
                 if (r.pocet) {
                   pocet += r.pocet;
                   const novy = ctx.flateStream(r.bytes, { Subtype: 'Form' });
@@ -246,9 +252,12 @@ window.FKObsah = (function () {
             if (el.typ === 'str') posun += sirkaRetezce(el.val, f);
             else if (el.typ === 'num') posun += -el.val / 1000 * Tfs * Th;
           }
-          const idx = vOblasti(oblasti, x, y);
-          if (idx >= 0) {
-            pocet++; pocty[idx]++;
+          const konec = mul([1, 0, 0, 1, posun, 0], Tm);
+          const mk = mul(konec, ctm);
+          const idx = vOblasti(oblasti, x, mk[4], y);
+          if (idx.length) {
+            pocet++; idx.forEach((i) => { pocty[i]++; });
+            odstranene.push({ x: Math.min(x, mk[4]), x1: Math.max(x, mk[4]), y, size: Math.abs(m[3]) || Math.abs(m[1]) || Tfs });
             let text = '';
             if (op === '"') text = fmt(Tw) + ' Tw ' + fmt(Tc) + ' Tc T* ';
             else if (op === "'") text = 'T* ';
@@ -274,16 +283,19 @@ window.FKObsah = (function () {
   }
 
   /**
-   * Odstraní textové operátory, které začínají v některé z oblastí.
-   * Vrací pole – počet odstraněných operátorů pro každou oblast (ve stejném pořadí).
+   * Odstraní textové operátory, které zasahují do některé z oblastí (začínají v ní nebo se s ní na řádku překrývají).
+   * Vrací { pocty, odstranene }: pocty = počet odstraněných operátorů pro každou oblast (ve stejném pořadí),
+   * odstranene = rozsah každého odstraněného operátoru { x, x1, y, size } v uživatelském prostoru – text, který v něm
+   * byl a nemá zmizet, musí volající napsat znovu.
    * Volat PŘED kreslením nového obsahu (page.drawText apod.).
    */
   async function odstranText(doc, page, oblasti) {
     const ctx = doc.context;
     const node = page.node;
     const pocty = oblasti.map(() => 0);
+    const odstranene = [];
     const contents = node.Contents();
-    if (!contents) return pocty;
+    if (!contents) return { pocty, odstranene };
     const proudy = contents instanceof PDFArray ? contents.asArray().map((r) => ctx.lookup(r)) : [contents];
     const casti = [];
     for (const s of proudy) { if (s instanceof PDFStream) { casti.push(decodePDFRawStream(s).decode()); casti.push(new Uint8Array([10])); } }
@@ -291,12 +303,12 @@ window.FKObsah = (function () {
     const bytes = new Uint8Array(delka); let o = 0;
     for (const c of casti) { bytes.set(c, o); o += c.length; }
 
-    const r = await zpracujProud(doc, bytes, node.Resources(), I, oblasti, new Map(), new Set(), pocty);
+    const r = await zpracujProud(doc, bytes, node.Resources(), I, oblasti, new Map(), new Set(), pocty, odstranene);
     if (r.pocet && r.bytes !== bytes) {
       const novy = ctx.flateStream(r.bytes);
       node.set(PDFName.of('Contents'), ctx.register(novy));
     }
-    return pocty;
+    return { pocty, odstranene };
   }
 
   return { odstranText, tokenizuj };

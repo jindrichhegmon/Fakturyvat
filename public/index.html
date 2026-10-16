@@ -207,7 +207,7 @@
     <p class="napoveda" style="margin-top:14px">Náhled výsledku vpravo v části Náhled se přepisuje sám při každé úpravě. Stažený soubor se jmenuje <em>název-upraveno.pdf</em>, originál zůstane beze změny.</p>
   </section>
 </main>
-<footer>Faktury – přepsání odběratele · v1.2 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
+<footer>Faktury – přepsání odběratele · v1.3 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
 
 <script>
 (function () {
@@ -221,10 +221,10 @@
     pdf: null,          // pdf.js dokument
     strana: null,       // pdf.js strana 1
     viewport: null,     // viewport náhledu
-    radky: [],          // segmenty textu: { x, y, w, size, text, items[] }
+    radky: [],          // segmenty textu: { x, y, w, size, text, bold, items[] } – items jsou části původních položek pdf.js
     adresa: [],         // indexy řádků adresy (v pořadí shora dolů)
-    dic: null,          // { radek, radekHodnoty, prefix, match } – řádek s DIČ, segment s hodnotou, popisek a hodnota
-    ico: null,          // totéž pro IČO
+    ico: [],            // řádky s IČO: { radek, radekHodnoty, prefix, match }
+    dic: [],            // řádky s DIČ: totéž
     rezim: 'adresa',
     fonty: null,        // { regular, bold } ArrayBuffer
     vysledek: null,     // { bytes, nazev } – naposledy vygenerované PDF (pro stažení)
@@ -253,19 +253,19 @@
   function kroky(n) { el.kroky.forEach((k, i) => k.classList.toggle('hotovo', i < n)); }
 
   /* ---------- rozpoznávání ---------- */
+  // hranice slova i pro česká písmena (\b v JS zná jen ASCII)
+  const Z = '(?:^|[^a-z0-9á-ž])', K = '(?![a-z0-9á-ž])';
   // popisek bloku odběratele (bez dodavatele)
-  const RE_ODBERATEL = /(odb[ěe]ratel|kupuj[íi]c[íi]|z[áa]kazn[íi]k|p[řr][íi]jemce|fakturujeme|fakturov[áa]no|faktura\s+pro|objednatel|bill(ed)?\s*to|invoice\s*to|invoiced\s*to|customer|sold\s*to|buyer|client|rechnungsempf[äa]nger)/i;
-  const RE_DODAVATEL = /(dodavatel|supplier|vendor|seller|vystavil|lieferant)/i;
+  const RE_ODBERATEL = new RegExp(Z + '(odb[ěe]ratel|kupuj[íi]c[íi]|z[áa]kazn[íi]k|p[řr][íi]jemce|fakturujeme|fakturov[áa]no|faktura\\s+pro|objednatel|bill(ed)?\\s*to|invoice\\s*to|invoiced\\s*to|customer|sold\\s*to|buyer|client|rechnungsempf[äa]nger)', 'i');
+  const RE_DODAVATEL = new RegExp(Z + '(dodavatel|prod[áa]vaj[íi]c[íi]|prodejce|supplier|vendor|seller|vystavil|vystavitel|lieferant)', 'i');
   // řádky, kterými blok adresy končí
-  const RE_KONEC = /^(i[čc]o?\b|i[čc]:|di[čc]\b|i[čc]\s*dph|vat\b|ust[-\s]?id|tax\s*id|datum|date|variabiln|vs\b|konstantn|platba|splatnost|due|objedn|order|tel\.?\b|telefon|phone|e-?mail|www\.|fax|banka|bank|účet|ucet|iban|dodavatel|supplier|faktura\b|invoice\b|číslo|cislo|strana|page)/i;
-  // popisek DIČ a tvar hodnoty (CZ12345678, SK2020123456, DE123456789, ATU12345678 …)
-  const RE_DIC = /(di[čc]|i[čc]\s*dph|vat(\s*(id|no\.?|number|reg\.?(istration)?))?|ust[-\s]?idnr?|tax\s*id|umsatzsteuer)/i;
-  const RE_DIC_HODNOTA = /\b([A-Z]{2}\s?[0-9A-Z]{8,12})\b/;
+  const RE_KONEC = new RegExp('^(i[čc]o?' + K + '|i[čc]:|di[čc]' + K + '|i[čc]\\s*dph|vat' + K + '|ust[-\\s]?id|tax\\s*id|datum' + K + '|date' + K + '|variabiln|vs' + K + '|konstantn|platba|splatnost|due' + K + '|objedn|order' + K + '|tel\\.?' + K + '|telefon|phone|e-?mail|www\\.|fax' + K + '|banka|bankovn|bank' + K + '|účet|ucet|iban' + K + '|dodavatel|supplier|faktura' + K + '|invoice' + K + '|číslo|cislo|strana' + K + '|page' + K + '|zp[ůu]sob|forma' + K + ')', 'i');
+  // popisek DIČ (DIČ, IČ DPH, VAT, VAT ID, USt-IdNr, Tax ID) – s hranicemi slova, aby „překontrolovat“ nebylo VAT
+  const RE_DIC = new RegExp(Z + '(di[čc]|i[čc]\\s*dph|vat(\\s*(id|no\\.?|number|reg\\.?(istration)?))?|ust[-\\s]?idnr?|tax\\s*id|umsatzsteuer)' + K, 'i');
   // popisek IČO (ne „IČ DPH“, to je slovenské DIČ)
-  const RE_ICO = /(^|[^a-zá-ž])(i[čc]o?|reg\.?\s*(no|č)\.?|company\s*(id|no\.?)|id\.?\s*no\.?)(?!\s*dph)(?=[\s:.]|$)/i;
+  const RE_ICO = new RegExp(Z + '(i[čc]o?|reg\\.?\\s*(no|č)\\.?|company\\s*(id|no\\.?)|id\\.?\\s*no\\.?)(?!\\s*dph)' + K, 'i');
   const POLE = { ico: { re: RE_ICO, nazev: 'IČO', ne: RE_DIC }, dic: { re: RE_DIC, nazev: 'DIČ', ne: null } };
 
-  // z položek pdf.js postaví segmenty (řádky rozdělené na sloupce podle velkých mezer)
   // tučné písmo: z načteného fontu (pdf.js ho po vykreslení drží v commonObjs), jinak podle názvu stylu
   function jeTucne(fontName, styles) {
     try {
@@ -276,18 +276,54 @@
     return /bold|black|heavy/i.test(styl.fontFamily || '');
   }
 
+  // měření šířky textu fontem Liberation Sans (metricky shodný s Arialem) – pro odhad polohy částí položky
+  const mereni = { ctx: null, nacteno: false };
+  async function pripravMereni() {
+    if (mereni.nacteno) return;
+    try {
+      const r = new FontFace('FKLiberation', 'url(fonts/LiberationSans-Regular.ttf)');
+      const b = new FontFace('FKLiberation', 'url(fonts/LiberationSans-Bold.ttf)', { weight: 'bold' });
+      document.fonts.add(await r.load()); document.fonts.add(await b.load());
+      mereni.ctx = document.createElement('canvas').getContext('2d');
+    } catch (e) { console.warn('font pro měření se nenačetl', e); }
+    mereni.nacteno = true;
+  }
+  function zmer(text, bold) {
+    if (!mereni.ctx) return text.length; // nouzově podle počtu znaků
+    mereni.ctx.font = (bold ? 'bold ' : '') + '100px FKLiberation';
+    return mereni.ctx.measureText(text).width;
+  }
+
+  // z položek pdf.js postaví segmenty (řádky rozdělené na sloupce podle mezer mezi položkami i podle víc mezer uvnitř položky)
   function postavRadky(content) {
-    const items = content.items
+    const puvodni = content.items
       .filter((it) => it.str && it.str.trim())
       .map((it) => {
         const t = it.transform;
         const size = Math.hypot(t[2], t[3]) || Math.abs(t[3]) || 10;
-        return { str: it.str, x: t[4], y: t[5], w: it.width, h: it.height || size, size, bold: jeTucne(it.fontName, content.styles) };
-      })
-      .sort((a, b) => (b.y - a.y) || (a.x - b.x));
+        return { str: it.str, x: t[4], y: t[5], w: it.width, size, bold: jeTucne(it.fontName, content.styles), casti: [] };
+      });
+    // části položky: text oddělený 2+ mezerami (zarovnání sloupců mezerami) má vlastní polohu odhadnutou podle šířky písma
+    const casti = [];
+    for (const it of puvodni) {
+      const re = /\S+(?: {1,2}\S+)*/g; let m;
+      const kusy = [];
+      while ((m = re.exec(it.str))) kusy.push({ str: m[0], od: m.index });
+      if (kusy.length === 1 && kusy[0].str === it.str) {
+        const c = { str: it.str.trim(), x: it.x, y: it.y, w: it.w, size: it.size, bold: it.bold, puvodni: it };
+        it.casti.push(c); casti.push(c); continue;
+      }
+      const cela = zmer(it.str, it.bold) || 1;
+      const k = it.w / cela;
+      for (const kus of kusy) {
+        const c = { str: kus.str, x: it.x + zmer(it.str.slice(0, kus.od), it.bold) * k, y: it.y, w: zmer(kus.str, it.bold) * k, size: it.size, bold: it.bold, puvodni: it };
+        it.casti.push(c); casti.push(c);
+      }
+    }
+    casti.sort((a, b) => (b.y - a.y) || (a.x - b.x));
 
     const linky = [];
-    for (const it of items) {
+    for (const it of casti) {
       const l = linky.find((ln) => Math.abs(ln.y - it.y) < Math.max(2, it.size * 0.35));
       if (l) { l.items.push(it); l.y = (l.y + it.y) / 2; } else linky.push({ y: it.y, items: [it] });
     }
@@ -296,29 +332,26 @@
       ln.items.sort((a, b) => a.x - b.x);
       let seg = null;
       for (const it of ln.items) {
-        const konecPredchozi = seg ? seg.x + seg.w : null;
-        const mezera = seg ? it.x - konecPredchozi : 0;
-        if (!seg || mezera > Math.max(seg.size, it.size) * 2.2) {
+        const mezera = seg ? it.x - (seg.x + seg.w) : 0;
+        if (!seg || mezera > Math.max(seg.size, it.size) * 1.6) {
           seg = { x: it.x, y: it.y, w: it.w, size: it.size, items: [it], text: it.str, bold: it.bold };
           radky.push(seg);
         } else {
-          seg.text += (mezera > it.size * 0.15 && !/\s$/.test(seg.text) && !/^\s/.test(it.str) ? ' ' : '') + it.str;
+          seg.text += (mezera > it.size * 0.12 && !/\s$/.test(seg.text) && !/^\s/.test(it.str) ? ' ' : '') + it.str;
           seg.w = Math.max(seg.w, it.x + it.w - seg.x);
           seg.size = Math.max(seg.size, it.size);
           seg.items.push(it);
         }
       }
     }
-    radky.forEach((r) => { r.text = r.text.replace(/\s+/g, ' ').trim(); });
-    // pořadí shora dolů, zleva doprava
+    radky.forEach((r) => { r.text = r.text.replace(/\s+/g, ' ').trim(); r.items.forEach((c) => { c.segment = r; }); });
     radky.sort((a, b) => (b.y - a.y) || (a.x - b.x));
     return radky;
   }
 
   // v textu řádku najde popisek pole (IČO / DIČ) a vrátí { prefix (text až po oddělovač), hodnota (zbytek) }, nebo null
   function rozdelRadek(typ, text) {
-    const re = POLE[typ].re;
-    const m = re.exec(text);
+    const m = POLE[typ].re.exec(text);
     if (!m) return null;
     const konecPopisku = m.index + m[0].length;
     const zbytek = text.slice(konecPopisku);
@@ -326,10 +359,38 @@
     return { prefix: text.slice(0, konecPopisku) + (odd.trim() ? odd.trim() + ' ' : ' '), hodnota: zbytek.slice(odd.length).trim() };
   }
 
+  // vytvoří záznam pole (ico / dic) pro řádek i; hodnota může být i v sousedním segmentu vpravo na stejné lince
+  function zaznamPole(typ, i) {
+    const r = stav.radky[i];
+    const d = rozdelRadek(typ, r.text);
+    let radekHodnoty = i, hodnota = d ? d.hodnota : r.text, prefix = d ? d.prefix : '';
+    if (!hodnota) {
+      const soused = stav.radky.findIndex((s2, k) => k !== i && Math.abs(s2.y - r.y) < r.size * 0.5 && s2.x > r.x);
+      if (soused >= 0) { radekHodnoty = soused; hodnota = stav.radky[soused].text; prefix = ''; }
+    }
+    return { radek: i, radekHodnoty, prefix, match: hodnota };
+  }
+  const maPole = (typ, i) => stav[typ].some((p) => p.radek === i || p.radekHodnoty === i);
+
+  // najde řádky s polem typ: všechny v okolí pod blokem adresy (stejný sloupec), jinak poslední výskyt v dokumentu (první bývá dodavatel)
+  function najdiPole(typ) {
+    const radky = stav.radky;
+    const re = POLE[typ].re, ne = POLE[typ].ne;
+    const kandidati = radky.map((r, i) => ({ r, i })).filter(({ r, i }) => re.test(r.text) && !(ne && ne.test(r.text)) && !stav.adresa.includes(i));
+    if (!kandidati.length) return;
+    let vybrane = [];
+    if (stav.adresa.length) {
+      const posl = radky[stav.adresa[stav.adresa.length - 1]];
+      const prvni = radky[stav.adresa[0]];
+      vybrane = kandidati.filter(({ r }) => r.y < posl.y + 1 && posl.y - r.y < posl.size * 12 && r.x > prvni.x - 20 && r.x < prvni.x + 260);
+    }
+    if (!vybrane.length) vybrane = [kandidati.length > 1 ? kandidati[kandidati.length - 1] : kandidati[0]];
+    stav[typ] = vybrane.map(({ i }) => zaznamPole(typ, i));
+  }
+
   function najdiAutomaticky() {
     const radky = stav.radky;
-    stav.adresa = [];
-    stav.dic = null; stav.ico = null;
+    stav.adresa = []; stav.ico = []; stav.dic = [];
 
     // 1) popisek „Odběratel“ (řádek, který není dodavatel)
     let popisek = -1;
@@ -340,25 +401,30 @@
 
     if (popisek >= 0) {
       const p = radky[popisek];
-      // text za popiskem na stejném řádku (např. „Odběratel: Firma s.r.o.“) – jen pokud je ve vlastní položce
+      // text za popiskem na stejném řádku (např. „Odběratel: Firma s.r.o.“)
       let prvni = p.items.findIndex((it, k) => k > 0 && !RE_ODBERATEL.test(it.str) && it.str.trim().length > 1);
       if (prvni < 0 && p.items.length === 1) {
-        // popisek i název v jedné položce („Odběratel: Firma s.r.o.“) – rozdělí se odhadem podle délky textu
+        // popisek i název v jedné části – rozdělí se odhadem podle šířky písma
         const it = p.items[0];
         const m = /^(.*?(?:odb[ěe]ratel|kupuj[íi]c[íi]|z[áa]kazn[íi]k|p[řr][íi]jemce|objednatel|bill(?:ed)?\s*to|invoice\s*to|customer|sold\s*to|buyer|client)\s*:?\s+)(\S.*)$/i.exec(it.str);
         if (m) {
-          const podil = m[1].length / it.str.length;
-          const sirkaPopisku = it.w * podil;
-          p.items = [{ ...it, str: m[1], w: sirkaPopisku, predpona: m[1] }, { ...it, str: m[2], x: it.x + sirkaPopisku, w: it.w - sirkaPopisku }];
+          const k = it.w / (zmer(it.str, it.bold) || 1);
+          const sirkaPopisku = zmer(m[1], it.bold) * k;
+          const a = { ...it, str: m[1].trim(), w: sirkaPopisku, predpona: m[1] };
+          const b = { ...it, str: m[2], x: it.x + sirkaPopisku, w: it.w - sirkaPopisku };
+          it.puvodni.casti.splice(it.puvodni.casti.indexOf(it), 1, a, b);
+          p.items = [a, b]; a.segment = p; b.segment = p;
           prvni = 1;
         }
       }
       if (prvni > 0) {
         const zbytek = p.items.slice(prvni);
         const seg = { x: zbytek[0].x, y: p.y, w: zbytek[zbytek.length - 1].x + zbytek[zbytek.length - 1].w - zbytek[0].x, size: zbytek[0].size, items: zbytek, text: zbytek.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim(), bold: zbytek[0].bold };
+        zbytek.forEach((c) => { c.segment = seg; });
         if (p.items[prvni - 1].predpona) {
-          // popisek a název byly v jedné položce: řádek pokryje celou položku a popisek se při přepisu napíše znovu
+          // popisek a název byly v jedné části: řádek pokryje celou položku a popisek se při přepisu napíše znovu
           seg.predpona = p.items[prvni - 1].predpona; seg.x = p.x; seg.w = p.items[prvni - 1].w + seg.w;
+          seg.items = p.items.slice(); seg.items.forEach((c) => { c.segment = seg; });
           radky.splice(popisek, 1, seg);
           stav.adresa.push(popisek);
         } else {
@@ -367,13 +433,20 @@
           stav.adresa.push(popisek + 1);
         }
       }
-      // 2) řádky pod popiskem ve stejném sloupci
+      // 2) řádky pod popiskem ve stejném sloupci; dvě části na stejné lince (PSČ + město) se spojí do jednoho řádku
       let posledniY = p.y, posledniSize = p.size;
       for (let i = popisek + 1; i < radky.length && stav.adresa.length < 7; i++) {
         const r = radky[i];
         if (stav.adresa.includes(i)) continue;
-        if (r.y >= p.y - 0.5) continue;                       // stejný řádek jako popisek
-        if (r.x < p.x - 12 || r.x > p.x + 220) continue;      // jiný sloupec
+        if (r.y >= p.y - 0.5) continue;                       // stejná linka jako popisek
+        if (r.x < p.x - 40 || r.x > p.x + 220) continue;      // jiný sloupec
+        const posl = stav.adresa.length ? radky[stav.adresa[stav.adresa.length - 1]] : null;
+        if (posl && Math.abs(posl.y - r.y) < r.size * 0.5 && r.x > posl.x) {
+          if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text)) continue;
+          posl.text += ' ' + r.text; posl.w = r.x + r.w - posl.x; posl.items = posl.items.concat(r.items); r.items.forEach((c) => { c.segment = posl; });
+          radky.splice(i, 1); i--;
+          continue;
+        }
         if (posledniY - r.y > Math.max(posledniSize, r.size) * 2.6) break; // velká mezera = konec bloku
         if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text)) break;
         stav.adresa.push(i);
@@ -381,39 +454,9 @@
       }
     }
 
-    // 3) IČO a DIČ odběratele: nejblíž pod blokem adresy
+    // 3) IČO a DIČ odběratele: všechny řádky v okolí pod blokem adresy
     najdiPole('ico');
     najdiPole('dic');
-  }
-
-  // označí řádek jako řádek s DIČ; hodnota může být i v sousedním segmentu vpravo na stejné lince
-  // označí řádek i jako řádek s polem typ (ico / dic); hodnota může být i v sousedním segmentu vpravo na stejné lince
-  function nastavPole(typ, i) {
-    const r = stav.radky[i];
-    const d = rozdelRadek(typ, r.text);
-    let radekHodnoty = i, hodnota = d ? d.hodnota : r.text, prefix = d ? d.prefix : '';
-    if (!hodnota) {
-      const soused = stav.radky.findIndex((s2, k) => k !== i && Math.abs(s2.y - r.y) < r.size * 0.5 && s2.x > r.x);
-      if (soused >= 0) { radekHodnoty = soused; hodnota = stav.radky[soused].text; prefix = ''; }
-    }
-    stav[typ] = { radek: i, radekHodnoty, prefix, match: hodnota };
-  }
-  const nastavDic = (i) => nastavPole('dic', i);
-
-  // najde řádek s polem typ: nejblíž pod blokem adresy (stejný sloupec), jinak poslední výskyt v dokumentu (první bývá dodavatel)
-  function najdiPole(typ) {
-    const radky = stav.radky;
-    const re = POLE[typ].re, ne = POLE[typ].ne;
-    const kandidati = radky.map((r, i) => ({ r, i })).filter(({ r }) => re.test(r.text) && !(ne && ne.test(r.text)) && !stav.adresa.includes(radky.indexOf(r)));
-    if (!kandidati.length) return;
-    let vybrany = null;
-    if (stav.adresa.length) {
-      const posl = radky[stav.adresa[stav.adresa.length - 1]];
-      const okoli = kandidati.filter(({ r }) => r.y < posl.y + 1 && posl.y - r.y < posl.size * 12 && Math.abs(r.x - posl.x) < 220).sort((a, b) => b.r.y - a.r.y);
-      vybrany = okoli[0] || null;
-    }
-    if (!vybrany) vybrany = kandidati.length > 1 ? kandidati[kandidati.length - 1] : kandidati[0];
-    nastavPole(typ, vybrany.i);
   }
 
   /* ---------- náhled ---------- */
@@ -442,8 +485,7 @@
       const [x1, y1] = vp.convertToViewportPoint(r.x, r.y + r.size * 0.95).map((v) => v * k);
       const [x2, y2] = vp.convertToViewportPoint(r.x + r.w, r.y - r.size * 0.25).map((v) => v * k);
       const d = document.createElement('div');
-      const je = (p) => stav[p] && (stav[p].radek === i || stav[p].radekHodnoty === i);
-      d.className = 'radek' + (stav.adresa.includes(i) ? ' adresa' : '') + (je('dic') ? ' dic' : '') + (je('ico') ? ' ico' : '');
+      d.className = 'radek' + (stav.adresa.includes(i) ? ' adresa' : '') + (maPole('dic', i) ? ' dic' : '') + (maPole('ico', i) ? ' ico' : '');
       d.style.left = Math.min(x1, x2) + 'px'; d.style.top = Math.min(y1, y2) + 'px';
       d.style.width = Math.max(4, Math.abs(x2 - x1)) + 'px'; d.style.height = Math.max(4, Math.abs(y2 - y1)) + 'px';
       d.title = r.text;
@@ -459,38 +501,44 @@
       stav.adresa.sort((a, b) => stav.radky[b].y - stav.radky[a].y || stav.radky[a].x - stav.radky[b].x);
     } else {
       const typ = stav.rezim; // 'dic' nebo 'ico'
-      if (stav[typ] && stav[typ].radek === i) stav[typ] = null; else nastavPole(typ, i);
+      const k = stav[typ].findIndex((p) => p.radek === i || p.radekHodnoty === i);
+      if (k >= 0) stav[typ].splice(k, 1); else { stav[typ].push(zaznamPole(typ, i)); stav[typ].sort((a, b) => stav.radky[b.radek].y - stav.radky[a.radek].y); }
     }
     vykresliPrekryv();
-    naplnFormular();
+    naplnFormular(stav.rezim !== 'adresa');
   }
 
   // pod polem IČO / DIČ: co se v PDF přepíše na co
   function infoPole() {
     for (const typ of ['ico', 'dic']) {
-      const p = stav[typ], info = el[typ + 'Info'], nova = el[typ].value.trim();
-      if (!p) { info.textContent = POLE[typ].nazev + ' v originálu nenalezeno – ' + (nova ? 'nemám ho kam napsat, ' : '') + 'označte řádek v originálu (režim „řádek s ' + POLE[typ].nazev + '“).'; continue; }
-      const puv = stav.radky[p.radekHodnoty].text;
-      info.textContent = nova ? 'Přepíše se „' + puv + '“ → „' + (p.radek === p.radekHodnoty ? p.prefix + nova : nova) + '“' : 'Pole je prázdné – řádek „' + puv + '“ se z faktury odstraní.';
+      const info = el[typ + 'Info'], nova = el[typ].value.trim();
+      if (!stav[typ].length) { info.textContent = POLE[typ].nazev + ' v originálu nenalezeno – ' + (nova ? 'nemám ho kam napsat, ' : '') + 'označte řádek v originálu (režim „řádek s ' + POLE[typ].nazev + '“).'; continue; }
+      info.textContent = stav[typ].map((p) => {
+        const puv = stav.radky[p.radekHodnoty].text;
+        return nova ? '„' + puv + '“ → „' + (p.radek === p.radekHodnoty ? p.prefix + nova : nova) + '“' : 'řádek „' + puv + '“ se odstraní (pole je prázdné)';
+      }).join(' · ');
     }
   }
 
   function stitek(trida, text) { return '<span class="stitek ' + trida + '"><i></i>' + text + '</span>'; }
 
-  function naplnFormular() {
-    el.vyberOdberatele.value = '';
-    el.adresa.value = stav.adresa.map((i) => stav.radky[i].text).join('\n');
-    el.tucne.checked = stav.adresa.length ? !!stav.radky[stav.adresa[0]].bold : false;
-    el.dic.value = stav.dic ? stav.dic.match : '';
-    el.ico.value = stav.ico ? stav.ico.match : '';
+  // naplní formulář z rozpoznaných řádků; jenPole = true nechá text adresy, IČO a DIČ tak, jak je (jen se mění označení řádků)
+  function naplnFormular(jenPole) {
+    if (!jenPole) {
+      el.vyberOdberatele.value = '';
+      el.adresa.value = stav.adresa.map((i) => stav.radky[i].text).join('\n');
+      el.tucne.checked = stav.adresa.length ? !!stav.radky[stav.adresa[0]].bold : false;
+      el.dic.value = stav.dic.length ? stav.dic[0].match : '';
+      el.ico.value = stav.ico.length ? stav.ico[0].match : '';
+    }
     infoPole();
     el.stitky.innerHTML = stitek('adresa ' + (stav.adresa.length ? 'ok' : 'chybi'), stav.adresa.length ? 'Adresa: ' + stav.adresa.length + ' řádky' : 'Adresa nenalezena')
-      + stitek('ico ' + (stav.ico ? 'ok' : 'chybi'), stav.ico ? 'IČO: ' + stav.ico.match : 'IČO nenalezeno')
-      + stitek('dic ' + (stav.dic ? 'ok' : 'chybi'), stav.dic ? 'DIČ: ' + stav.dic.match : 'DIČ nenalezeno');
+      + stitek('ico ' + (stav.ico.length ? 'ok' : 'chybi'), stav.ico.length ? 'IČO: ' + stav.ico.map((p) => p.match).join(', ') : 'IČO nenalezeno')
+      + stitek('dic ' + (stav.dic.length ? 'ok' : 'chybi'), stav.dic.length ? 'DIČ: ' + stav.dic.map((p) => p.match).join(', ') : 'DIČ nenalezeno');
     const chybi = [];
     if (!stav.adresa.length) chybi.push('adresu');
-    if (!stav.ico) chybi.push('IČO');
-    if (!stav.dic) chybi.push('DIČ');
+    if (!stav.ico.length) chybi.push('IČO');
+    if (!stav.dic.length) chybi.push('DIČ');
     hlaska(el.hlaskaNahled, chybi.length ? 'Automaticky se nepodařilo najít ' + chybi.join(' a ') + '. Přepněte režim a označte řádky kliknutím v originálu.' : '', 'chyba');
     kroky(stav.bytes ? 1 : 0);
     naplanujNahled();
@@ -510,13 +558,14 @@
       stav.pdf = await pdfjsLib.getDocument({ data: stav.bytes.slice() }).promise;
       stav.strana = await stav.pdf.getPage(1);
       const content = await stav.strana.getTextContent();
-      stav.radky = [];
+      stav.radky = []; stav.adresa = []; stav.ico = []; stav.dic = [];
+      await pripravMereni();
       await vykresli(); // nejdřív vykreslit – načtou se fonty (kvůli rozpoznání tučného písma)
       stav.radky = postavRadky(content);
       najdiAutomaticky();
       vykresliPrekryv();
       el.znovuNajit.disabled = false; el.zrusitVyber.disabled = false;
-      naplnFormular();
+      naplnFormular(false);
       if (!stav.radky.length) hlaska(el.hlaskaNahled, 'V PDF není žádný text (nejspíš naskenovaný obrázek) – přepsat jde jen textová PDF.', 'chyba');
     } catch (e) {
       console.error(e);
@@ -535,15 +584,15 @@
     return stav.fonty;
   }
 
-  // vrátí { bytes, odstraneno, neodstraneno } nebo { chyba } když není co / kam psát
+  // vrátí { bytes, odstraneno, neodstraneno, varovani } nebo { chyba } když není co přepsat
   async function vytvorPdf() {
     const { PDFDocument, rgb } = PDFLib;
     const noveRadky = el.adresa.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     const nove = { ico: el.ico.value.trim(), dic: el.dic.value.trim() };
     const varovani = [];
     if (noveRadky.length && !stav.adresa.length) varovani.push('Adresu nemám kam napsat – označte v originálu řádky původní adresy.');
-    for (const typ of ['ico', 'dic']) if (nove[typ] && !stav[typ]) varovani.push(POLE[typ].nazev + ' nemám kam napsat – označte v originálu řádek s ' + POLE[typ].nazev + '.');
-    if (!stav.adresa.length && !stav.ico && !stav.dic) return { chyba: 'Není co přepsat – označte v originálu řádky adresy, IČO a DIČ.' };
+    for (const typ of ['ico', 'dic']) if (nove[typ] && !stav[typ].length) varovani.push(POLE[typ].nazev + ' nemám kam napsat – označte v originálu řádek s ' + POLE[typ].nazev + '.');
+    if (!stav.adresa.length && !stav.ico.length && !stav.dic.length) return { chyba: 'Není co přepsat – označte v originálu řádky adresy, IČO a DIČ.' };
 
     const fonty = await nactiFonty();
     const doc = await PDFDocument.load(stav.bytes, { ignoreEncryption: true });
@@ -553,56 +602,67 @@
     const page = doc.getPage(0);
     const bila = rgb(1, 1, 1), cerna = rgb(0, 0, 0);
     const vlastniVelikost = parseFloat(String(el.velikost.value).replace(',', '.'));
+    const velikost = (seg) => (vlastniVelikost > 0 ? vlastniVelikost : seg.size);
 
-    // 1) původní text odstranit přímo z obsahu PDF (aby nešel označit ani vytěžit)
+    // 1) co se v kterém segmentu napíše místo původního textu ('' = segment zmizí)
+    const nahrady = new Map(); // segment -> { text, font, predpona? }
     const puv = stav.adresa.map((i) => stav.radky[i]);
-    const oblasti = puv.map((r) => ({ x: r.x, y: r.y, w: r.w, size: r.size }));
-    const poleOblasti = {};
+    puv.forEach((seg, k) => nahrady.set(seg, { text: k < noveRadky.length ? noveRadky[k] : '', font: k === 0 && el.tucne.checked ? fBold : fRegular, predpona: k === 0 ? seg.predpona : null }));
     for (const typ of ['ico', 'dic']) {
-      if (!stav[typ]) continue;
-      const seg = stav.radky[stav[typ].radekHodnoty];
-      poleOblasti[typ] = oblasti.length;
-      oblasti.push({ x: seg.x, y: seg.y, w: seg.w, size: seg.size });
+      for (const p of stav[typ]) {
+        const seg = stav.radky[p.radekHodnoty];
+        if (nahrady.has(seg)) continue;
+        nahrady.set(seg, { text: nove[typ] ? (p.radek === p.radekHodnoty ? p.prefix + nove[typ] : nove[typ]) : '', font: seg.bold ? fBold : fRegular });
+      }
     }
-    let pocty = oblasti.map(() => 0);
-    try { pocty = await FKObsah.odstranText(doc, page, oblasti); } catch (e) { console.warn('odstranění textu selhalo', e); }
+
+    // 2) původní text odstranit přímo z obsahu PDF. Odstraní se celé příkazy, do kterých přepisované segmenty zasahují
+    //    (jeden příkaz často nese celý řádek zarovnaný mezerami), a co z nich nemá zmizet, se napíše znovu.
+    const segmenty = [...nahrady.keys()];
+    const oblasti = segmenty.map((seg) => ({ x: seg.x, y: seg.y, w: seg.w, size: seg.size }));
+    let pocty = oblasti.map(() => 0), odstranene = [];
+    try { const r = await FKObsah.odstranText(doc, page, oblasti); pocty = r.pocty; odstranene = r.odstranene; } catch (e) { console.warn('odstranění textu selhalo', e); }
     const odstraneno = pocty.reduce((a, b) => a + b, 0);
     const neodstraneno = pocty.filter((n) => !n).length;
-    // 2) kde se text odstranit nepodařilo, aspoň ho překrýt bílou plochou
-    const zabil = (k, x, y, w, size) => { if (k < 0 || !pocty[k]) page.drawRectangle({ x: x - 1.5, y: y - size * 0.28, width: w + 3, height: size * 1.25, color: bila, borderWidth: 0 }); };
+    const zabil = (x, y, w, size) => page.drawRectangle({ x: x - 1.5, y: y - size * 0.28, width: w + 3, height: size * 1.25, color: bila, borderWidth: 0 });
 
-    // adresa: nové řádky napsat na místa původních (další pod ně)
-    if (stav.adresa.length) {
-      const size = vlastniVelikost > 0 ? vlastniVelikost : puv[0].size;
-      const krok = puv.length > 1 ? Math.max(size * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : size * 1.25;
-      puv.forEach((r, k) => zabil(k, r.x, r.y, r.w, r.size));
-      const x0 = puv[0].x;
-      noveRadky.forEach((text, k) => {
-        const font = k === 0 && el.tucne.checked ? fBold : fRegular;
-        const y = k < puv.length ? puv[k].y : puv[puv.length - 1].y - krok * (k - puv.length + 1);
-        let x = x0;
-        if (k === 0 && puv[0].predpona) { // popisek („Odběratel: “) napsat znovu před název
-          page.drawText(puv[0].predpona, { x, y, size, font: fRegular, color: cerna });
-          x += fRegular.widthOfTextAtSize(puv[0].predpona, size);
-        }
-        const w = font.widthOfTextAtSize(text, size);
-        const puvW = k < puv.length ? puv[k].x + puv[k].w - x : 0;
-        if (w > puvW + 1) zabil(k < puv.length ? k : -1, x, y, w, size);
-        page.drawText(text, { x, y, size, font, color: cerna });
-      });
+    // 3) části textu, které ležely v odstraněných příkazech a nemění se, napsat znovu na původní místo
+    const vsechnyCasti = [];
+    for (const r of stav.radky) for (const c of r.items) vsechnyCasti.push(c);
+    const znovu = new Set();
+    for (const o of odstranene) {
+      for (const c of vsechnyCasti) {
+        if (Math.abs(c.y - o.y) < Math.max(c.size, o.size) * 0.5 && c.x > o.x - 1.5 && c.x < o.x1 - 0.5) znovu.add(c);
+      }
+    }
+    for (const c of znovu) {
+      if (c.segment && nahrady.has(c.segment)) continue;
+      page.drawText(c.str, { x: c.x, y: c.y, size: c.size, font: c.bold ? fBold : fRegular, color: cerna });
     }
 
-    // IČO a DIČ: celý segment s hodnotou se napíše znovu – popisek + nová hodnota (prázdné pole = řádek se jen odstraní)
-    for (const typ of ['ico', 'dic']) {
-      const p = stav[typ];
-      if (!p) continue;
-      const seg = stav.radky[p.radekHodnoty];
-      const size = vlastniVelikost > 0 ? vlastniVelikost : seg.size;
-      const font = seg.bold ? fBold : fRegular;
-      const text = nove[typ] ? (p.radek === p.radekHodnoty ? p.prefix + nove[typ] : nove[typ]) : '';
-      const w = Math.max(seg.w, text ? font.widthOfTextAtSize(text, size) : 0);
-      zabil(poleOblasti[typ], seg.x, seg.y, w, seg.size);
-      if (text) page.drawText(text, { x: seg.x, y: seg.y, size, font, color: cerna });
+    // 4) přepisované segmenty: kde se původní text odstranit nepodařilo, překrýt bílou plochou; pak napsat nový text
+    segmenty.forEach((seg, k) => {
+      const n = nahrady.get(seg);
+      if (!pocty[k]) zabil(seg.x, seg.y, seg.w, seg.size);
+      if (!n.text) return;
+      const size = velikost(seg);
+      let x = seg.x;
+      if (n.predpona) { page.drawText(n.predpona, { x, y: seg.y, size, font: fRegular, color: cerna }); x += fRegular.widthOfTextAtSize(n.predpona, size); }
+      const w = n.font.widthOfTextAtSize(n.text, size);
+      if (!pocty[k] && w > seg.x + seg.w - x + 1) zabil(x, seg.y, w, size);
+      page.drawText(n.text, { x, y: seg.y, size, font: n.font, color: cerna });
+    });
+
+    // 5) adresa delší než původní: další řádky pod poslední původní
+    if (puv.length && noveRadky.length > puv.length) {
+      const size = velikost(puv[0]);
+      const krok = puv.length > 1 ? Math.max(size * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : size * 1.25;
+      for (let k = puv.length; k < noveRadky.length; k++) {
+        const y = puv[puv.length - 1].y - krok * (k - puv.length + 1);
+        const w = fRegular.widthOfTextAtSize(noveRadky[k], size);
+        zabil(puv[0].x, y, w, size);
+        page.drawText(noveRadky[k], { x: puv[0].x, y, size, font: fRegular, color: cerna });
+      }
     }
 
     return { bytes: await doc.save(), odstraneno, neodstraneno, varovani };
@@ -689,8 +749,8 @@
     vykresliPrekryv();
   });
   try { if (localStorage.getItem('faktura.rozlozeni') === 'podSebou') { el.nahledy.classList.add('podSebou'); el.rozlozeni.textContent = 'Vedle sebe'; } } catch (e) { /* bez úložiště */ }
-  el.znovuNajit.addEventListener('click', () => { najdiAutomaticky(); vykresliPrekryv(); naplnFormular(); });
-  el.zrusitVyber.addEventListener('click', () => { stav.adresa = []; stav.dic = null; stav.ico = null; vykresliPrekryv(); naplnFormular(); });
+  el.znovuNajit.addEventListener('click', () => { najdiAutomaticky(); vykresliPrekryv(); naplnFormular(false); });
+  el.zrusitVyber.addEventListener('click', () => { stav.adresa = []; stav.dic = []; stav.ico = []; vykresliPrekryv(); naplnFormular(true); });
   el.rezimy.querySelectorAll('button[data-rezim]').forEach((b) => b.addEventListener('click', () => {
     stav.rezim = b.dataset.rezim;
     el.rezimy.querySelectorAll('button[data-rezim]').forEach((x) => x.classList.toggle('aktivni', x === b));
