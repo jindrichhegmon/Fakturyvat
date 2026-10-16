@@ -1,0 +1,21 @@
+# Faktura – přepsání odběratele. Statická stránka, bez buildu a bez serveru; publikuje se složka public/.
+[build]
+  publish = "public"
+  command = "echo 'bez buildu'"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+
+# knihovny a fonty se mění jen s nasazením – prohlížeč je může držet den
+[[headers]]
+  for = "/lib/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
