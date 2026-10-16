@@ -14,7 +14,8 @@ všechny údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
 - Původní text se z obsahu PDF **odstraní** (textové operátory se nahradí posunem stejné šířky, viz
   `public/prepis-obsahu.js`), ne jen překryje – v novém souboru nejde označit ani vytěžit.
   Kde se odstranit nepodaří, překryje se bílou plochou a stránka to ohlásí.
-- Nový text se píše fontem Liberation Sans (česká diakritika). Funguje jen pro textová PDF,
+- Nový text se píše fontem Liberation Sans (česká diakritika). Když je delší než původní místo (po další text
+  vpravo nebo po okraj stránky), písmo se automaticky zmenší, aby nepřetekl rámeček; ručně zadaná velikost má přednost. Funguje jen pro textová PDF,
   naskenované obrázky ne.
 
 - Náhled výsledku je hned vedle originálu a přepisuje se sám při každé úpravě; stažení až tlačítkem.

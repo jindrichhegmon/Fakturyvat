@@ -207,7 +207,7 @@
     <p class="napoveda" style="margin-top:14px">Náhled výsledku vpravo v části Náhled se přepisuje sám při každé úpravě. Stažený soubor se jmenuje <em>název-upraveno.pdf</em>, originál zůstane beze změny.</p>
   </section>
 </main>
-<footer>Faktury – přepsání odběratele · v1.3 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
+<footer>Faktury – přepsání odběratele · v1.4 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
 
 <script>
 (function () {
@@ -263,7 +263,7 @@
   // popisek DIČ (DIČ, IČ DPH, VAT, VAT ID, USt-IdNr, Tax ID) – s hranicemi slova, aby „překontrolovat“ nebylo VAT
   const RE_DIC = new RegExp(Z + '(di[čc]|i[čc]\\s*dph|vat(\\s*(id|no\\.?|number|reg\\.?(istration)?))?|ust[-\\s]?idnr?|tax\\s*id|umsatzsteuer)' + K, 'i');
   // popisek IČO (ne „IČ DPH“, to je slovenské DIČ)
-  const RE_ICO = new RegExp(Z + '(i[čc]o?|reg\\.?\\s*(no|č)\\.?|company\\s*(id|no\\.?)|id\\.?\\s*no\\.?)(?!\\s*dph)' + K, 'i');
+  const RE_ICO = new RegExp(Z + '(i[čc]o?|reg\\.?\\s*(no|č)\\.?|company\\s*(id|no\\.?)|id\\.?\\s*no\\.?|id)(?!\\s*dph)' + K, 'i');
   const POLE = { ico: { re: RE_ICO, nazev: 'IČO', ne: RE_DIC }, dic: { re: RE_DIC, nazev: 'DIČ', ne: null } };
 
   // tučné písmo: z načteného fontu (pdf.js ho po vykreslení drží v commonObjs), jinak podle názvu stylu
@@ -366,7 +366,7 @@
     let radekHodnoty = i, hodnota = d ? d.hodnota : r.text, prefix = d ? d.prefix : '';
     if (!hodnota) {
       const soused = stav.radky.findIndex((s2, k) => k !== i && Math.abs(s2.y - r.y) < r.size * 0.5 && s2.x > r.x);
-      if (soused >= 0) { radekHodnoty = soused; hodnota = stav.radky[soused].text; prefix = ''; }
+      if (soused >= 0 && !RE_DIC.test(stav.radky[soused].text) && !RE_ICO.test(stav.radky[soused].text)) { radekHodnoty = soused; hodnota = stav.radky[soused].text; prefix = ''; }
     }
     return { radek: i, radekHodnoty, prefix, match: hodnota };
   }
@@ -382,7 +382,7 @@
     if (stav.adresa.length) {
       const posl = radky[stav.adresa[stav.adresa.length - 1]];
       const prvni = radky[stav.adresa[0]];
-      vybrane = kandidati.filter(({ r }) => r.y < posl.y + 1 && posl.y - r.y < posl.size * 12 && r.x > prvni.x - 20 && r.x < prvni.x + 260);
+      vybrane = kandidati.filter(({ r }) => r.y < posl.y + 1 && posl.y - r.y < posl.size * 12 && r.x > prvni.x - 120 && r.x < prvni.x + 260);
     }
     if (!vybrane.length) vybrane = [kandidati.length > 1 ? kandidati[kandidati.length - 1] : kandidati[0]];
     stav[typ] = vybrane.map(({ i }) => zaznamPole(typ, i));
@@ -402,11 +402,11 @@
     if (popisek >= 0) {
       const p = radky[popisek];
       // text za popiskem na stejném řádku (např. „Odběratel: Firma s.r.o.“)
-      let prvni = p.items.findIndex((it, k) => k > 0 && !RE_ODBERATEL.test(it.str) && it.str.trim().length > 1);
+      let prvni = p.items.findIndex((it, k) => k > 0 && !RE_ODBERATEL.test(it.str) && /[^\s:.\-–]/.test(it.str) && it.str.trim().length > 1);
       if (prvni < 0 && p.items.length === 1) {
         // popisek i název v jedné části – rozdělí se odhadem podle šířky písma
         const it = p.items[0];
-        const m = /^(.*?(?:odb[ěe]ratel|kupuj[íi]c[íi]|z[áa]kazn[íi]k|p[řr][íi]jemce|objednatel|bill(?:ed)?\s*to|invoice\s*to|customer|sold\s*to|buyer|client)\s*:?\s+)(\S.*)$/i.exec(it.str);
+        const m = /^(.*?(?:odb[ěe]ratel|kupuj[íi]c[íi]|z[áa]kazn[íi]k|p[řr][íi]jemce|objednatel|bill(?:ed)?\s*to|invoice\s*to|customer|sold\s*to|buyer|client)\s*:?\s+)([^\s:].*)$/i.exec(it.str);
         if (m) {
           const k = it.w / (zmer(it.str, it.bold) || 1);
           const sirkaPopisku = zmer(m[1], it.bold) * k;
@@ -433,13 +433,19 @@
           stav.adresa.push(popisek + 1);
         }
       }
+      // název na stejné lince vpravo od popisku v samostatném segmentu („Customer :     Firma s.r.o.“)
+      let sloupecX = p.x;
+      if (!stav.adresa.length) {
+        const vedle = radky.findIndex((r, k) => k !== popisek && Math.abs(r.y - p.y) < p.size * 0.5 && r.x > p.x && r.x < p.x + 200 && !RE_KONEC.test(r.text) && /[^\s:.\-–]/.test(r.text));
+        if (vedle >= 0) { stav.adresa.push(vedle); sloupecX = radky[vedle].x; }
+      }
       // 2) řádky pod popiskem ve stejném sloupci; dvě části na stejné lince (PSČ + město) se spojí do jednoho řádku
       let posledniY = p.y, posledniSize = p.size;
       for (let i = popisek + 1; i < radky.length && stav.adresa.length < 7; i++) {
         const r = radky[i];
         if (stav.adresa.includes(i)) continue;
         if (r.y >= p.y - 0.5) continue;                       // stejná linka jako popisek
-        if (r.x < p.x - 40 || r.x > p.x + 220) continue;      // jiný sloupec
+        if (r.x < Math.min(p.x, sloupecX) - 40 || r.x > Math.max(p.x, sloupecX) + 220) continue; // jiný sloupec
         const posl = stav.adresa.length ? radky[stav.adresa[stav.adresa.length - 1]] : null;
         if (posl && Math.abs(posl.y - r.y) < r.size * 0.5 && r.x > posl.x) {
           if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text)) continue;
@@ -447,7 +453,7 @@
           radky.splice(i, 1); i--;
           continue;
         }
-        if (posledniY - r.y > Math.max(posledniSize, r.size) * 2.6) break; // velká mezera = konec bloku
+        if (posledniY - r.y > Math.max(posledniSize, r.size) * 3.4) break; // velká mezera = konec bloku (prázdný řádek za názvem je běžný)
         if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text)) break;
         stav.adresa.push(i);
         posledniY = r.y; posledniSize = r.size;
@@ -602,7 +608,25 @@
     const page = doc.getPage(0);
     const bila = rgb(1, 1, 1), cerna = rgb(0, 0, 0);
     const vlastniVelikost = parseFloat(String(el.velikost.value).replace(',', '.'));
-    const velikost = (seg) => (vlastniVelikost > 0 ? vlastniVelikost : seg.size);
+    const sirkaStranky = page.getWidth();
+    const vsechnyCasti = [];
+    for (const r of stav.radky) for (const c of r.items) vsechnyCasti.push(c);
+    // kolik místa je od x doprava na stejné lince: po nejbližší další text, který není součástí segmentu, nebo po okraj stránky
+    const mistoVpravo = (seg, x) => {
+      let hranice = sirkaStranky - 14;
+      for (const c of vsechnyCasti) {
+        if (seg.items.includes(c)) continue;
+        if (Math.abs(c.y - seg.y) < seg.size * 0.5 && c.x > x + 1 && c.x < hranice) hranice = c.x - 3;
+      }
+      return Math.max(hranice - x, seg.w * 0.6, 20);
+    };
+    // velikost písma: zadaná uživatelem, jinak původní zmenšená tak, aby se text vešel
+    const velikost = (seg, text, font, x) => {
+      if (vlastniVelikost > 0) return vlastniVelikost;
+      const w = font.widthOfTextAtSize(text, seg.size);
+      const misto = mistoVpravo(seg, x === undefined ? seg.x : x);
+      return w > misto ? Math.max(4, seg.size * misto / w) : seg.size;
+    };
 
     // 1) co se v kterém segmentu napíše místo původního textu ('' = segment zmizí)
     const nahrady = new Map(); // segment -> { text, font, predpona? }
@@ -627,8 +651,6 @@
     const zabil = (x, y, w, size) => page.drawRectangle({ x: x - 1.5, y: y - size * 0.28, width: w + 3, height: size * 1.25, color: bila, borderWidth: 0 });
 
     // 3) části textu, které ležely v odstraněných příkazech a nemění se, napsat znovu na původní místo
-    const vsechnyCasti = [];
-    for (const r of stav.radky) for (const c of r.items) vsechnyCasti.push(c);
     const znovu = new Set();
     for (const o of odstranene) {
       for (const c of vsechnyCasti) {
@@ -645,9 +667,12 @@
       const n = nahrady.get(seg);
       if (!pocty[k]) zabil(seg.x, seg.y, seg.w, seg.size);
       if (!n.text) return;
-      const size = velikost(seg);
       let x = seg.x;
-      if (n.predpona) { page.drawText(n.predpona, { x, y: seg.y, size, font: fRegular, color: cerna }); x += fRegular.widthOfTextAtSize(n.predpona, size); }
+      let size;
+      if (n.predpona) {
+        size = velikost(seg, n.predpona + n.text, n.font);
+        page.drawText(n.predpona, { x, y: seg.y, size, font: fRegular, color: cerna }); x += fRegular.widthOfTextAtSize(n.predpona, size);
+      } else size = velikost(seg, n.text, n.font);
       const w = n.font.widthOfTextAtSize(n.text, size);
       if (!pocty[k] && w > seg.x + seg.w - x + 1) zabil(x, seg.y, w, size);
       page.drawText(n.text, { x, y: seg.y, size, font: n.font, color: cerna });
@@ -655,10 +680,11 @@
 
     // 5) adresa delší než původní: další řádky pod poslední původní
     if (puv.length && noveRadky.length > puv.length) {
-      const size = velikost(puv[0]);
-      const krok = puv.length > 1 ? Math.max(size * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : size * 1.25;
+      const zakl = vlastniVelikost > 0 ? vlastniVelikost : puv[0].size;
+      const krok = puv.length > 1 ? Math.max(zakl * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : zakl * 1.25;
       for (let k = puv.length; k < noveRadky.length; k++) {
         const y = puv[puv.length - 1].y - krok * (k - puv.length + 1);
+        const size = velikost({ ...puv[puv.length - 1], y }, noveRadky[k], fRegular);
         const w = fRegular.widthOfTextAtSize(noveRadky[k], size);
         zabil(puv[0].x, y, w, size);
         page.drawText(noveRadky[k], { x: puv[0].x, y, size, font: fRegular, color: cerna });
