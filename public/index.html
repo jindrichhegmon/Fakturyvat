@@ -20,6 +20,7 @@
     --akcent: #0f766e; --akcent-tmavy: #115e59; --akcent-svetly: #ccfbf1;
     --modra: #2563eb; --modra-svetla: rgba(37,99,235,.18);
     --zelena: #16a34a; --zelena-svetla: rgba(22,163,74,.22);
+    --oranzova: #ea580c; --oranzova-svetla: rgba(234,88,12,.2);
     --text: #1e293b; --text-tlumeny: #64748b; --okraj: #e2e8f0; --pozadi: #f1f5f9; --karta: #fff;
     --stin: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -12px rgba(15,23,42,.18);
   }
@@ -60,7 +61,7 @@
   .stitek.ok { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
   .stitek.chybi { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
   .stitek i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-  .stitek.adresa i { background: var(--modra); } .stitek.dic i { background: var(--zelena); }
+  .stitek.adresa i { background: var(--modra); } .stitek.dic i { background: var(--zelena); } .stitek.ico i { background: var(--oranzova); }
   /* náhledy */
   .listy { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .rezim { display: inline-flex; border: 1px solid var(--okraj); border-radius: 10px; overflow: hidden; }
@@ -68,6 +69,7 @@
   .rezim button + button { border-left: 1px solid var(--okraj); }
   .rezim button.aktivni.adresa { background: var(--modra); color: #fff; }
   .rezim button.aktivni.dic { background: var(--zelena); color: #fff; }
+  .rezim button.aktivni.ico { background: var(--oranzova); color: #fff; }
   .napoveda { color: var(--text-tlumeny); font-size: 13px; margin: 0; }
   .nahledy { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
   .nahledy.podSebou { grid-template-columns: 1fr; }
@@ -82,6 +84,7 @@
   .radek:hover { border-color: #94a3b8; background: rgba(15,23,42,.06); }
   .radek.adresa { background: var(--modra-svetla); border-color: var(--modra); }
   .radek.dic { background: var(--zelena-svetla); border-color: var(--zelena); }
+  .radek.ico { background: var(--oranzova-svetla); border-color: var(--oranzova); }
   .prazdny { border: 1px dashed var(--okraj); border-radius: 10px; padding: 40px 16px; text-align: center; color: var(--text-tlumeny); background: #f8fafc; }
   .prazdny.skryty, .skryty { display: none !important; }
   .generuji { font-size: 12px; font-weight: 500; color: var(--text-tlumeny); }
@@ -118,7 +121,7 @@
   <div class="vnitrek">
     <div>
       <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>Faktury – přepsání odběratele</h1>
-      <p>Načtěte PDF fakturu, upravte adresu a DIČ odběratele a stáhněte nové PDF. Vše běží jen ve vašem prohlížeči, soubor se nikam neposílá.</p>
+      <p>Načtěte PDF fakturu, upravte adresu, IČO a DIČ odběratele a stáhněte nové PDF. Vše běží jen ve vašem prohlížeči, soubor se nikam neposílá.</p>
     </div>
     <div class="kroky">
       <span class="krok" id="krok1"><b data-n="1"></b>Načíst fakturu</span>
@@ -150,6 +153,7 @@
       <span class="napoveda">Kliknutím na řádek v originálu označím:</span>
       <span class="rezim" id="rezimy">
         <button type="button" class="adresa aktivni" data-rezim="adresa">řádek adresy</button>
+        <button type="button" class="ico" data-rezim="ico">řádek s IČO</button>
         <button type="button" class="dic" data-rezim="dic">řádek s DIČ</button>
       </span>
       <button type="button" id="znovuNajit" disabled>Najít znovu</button>
@@ -159,7 +163,7 @@
     <div class="prazdny" id="prazdny">Zatím není načtená žádná faktura.</div>
     <div class="nahledy skryty" id="nahledy">
       <div class="list">
-        <div class="titulek"><span><span class="tecka"></span>Originál</span><span class="napoveda">modře adresa · zeleně DIČ</span></div>
+        <div class="titulek"><span><span class="tecka"></span>Originál</span><span class="napoveda">modře adresa · oranžově IČO · zeleně DIČ</span></div>
         <div class="papir" id="nahled">
           <canvas id="platno"></canvas>
           <div class="prekryv" id="prekryv"></div>
@@ -176,7 +180,7 @@
 
   <section class="karta">
     <h2><span class="cislo">3</span> Odběratel</h2>
-    <label for="vyberOdberatele">Vybrat odběratele <small>(vyplní adresu i DIČ)</small></label>
+    <label for="vyberOdberatele">Vybrat odběratele <small>(vyplní adresu, IČO i DIČ)</small></label>
     <select id="vyberOdberatele"><option value="">— vlastní / podle faktury —</option></select>
     <label for="adresa">Adresa odběratele <small>(každý řádek zvlášť: název, ulice, město…)</small></label>
     <textarea id="adresa" placeholder="Firma s.r.o.&#10;Ulice 123&#10;110 00 Praha 1"></textarea>
@@ -184,6 +188,10 @@
       <label><input type="checkbox" id="tucne"> První řádek tučně</label>
       <label>Velikost písma <input type="text" id="velikost" placeholder="auto"> <small>pt</small></label>
     </div>
+
+    <label for="ico">IČO odběratele</label>
+    <input type="text" id="ico" placeholder="12345678" autocomplete="off">
+    <p class="napoveda" id="icoInfo" style="margin-top:6px"></p>
 
     <label for="dic">DIČ odběratele</label>
     <input type="text" id="dic" placeholder="CZ12345678" autocomplete="off">
@@ -199,7 +207,7 @@
     <p class="napoveda" style="margin-top:14px">Náhled výsledku vpravo v části Náhled se přepisuje sám při každé úpravě. Stažený soubor se jmenuje <em>název-upraveno.pdf</em>, originál zůstane beze změny.</p>
   </section>
 </main>
-<footer>Faktury – přepsání odběratele · v1.1 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
+<footer>Faktury – přepsání odběratele · v1.2 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
 
 <script>
 (function () {
@@ -215,7 +223,8 @@
     viewport: null,     // viewport náhledu
     radky: [],          // segmenty textu: { x, y, w, size, text, items[] }
     adresa: [],         // indexy řádků adresy (v pořadí shora dolů)
-    dic: null,          // { radek, item, match } – řádek s DIČ, položka s hodnotou a nalezená hodnota
+    dic: null,          // { radek, radekHodnoty, prefix, match } – řádek s DIČ, segment s hodnotou, popisek a hodnota
+    ico: null,          // totéž pro IČO
     rezim: 'adresa',
     fonty: null,        // { regular, bold } ArrayBuffer
     vysledek: null,     // { bytes, nazev } – naposledy vygenerované PDF (pro stažení)
@@ -226,7 +235,7 @@
   const el = {
     soubor: $('soubor'), drop: $('drop'), souborInfo: $('souborInfo'), souborNazev: $('souborNazev'), jinySoubor: $('jinySoubor'),
     platno: $('platno'), prekryv: $('prekryv'), nahled: $('nahled'), nahledy: $('nahledy'), prazdny: $('prazdny'),
-    adresa: $('adresa'), dic: $('dic'), dicInfo: $('dicInfo'), tucne: $('tucne'), velikost: $('velikost'),
+    adresa: $('adresa'), dic: $('dic'), dicInfo: $('dicInfo'), ico: $('ico'), icoInfo: $('icoInfo'), tucne: $('tucne'), velikost: $('velikost'),
     stahnout: $('stahnout'), znovuNajit: $('znovuNajit'), zrusitVyber: $('zrusitVyber'), hlaskaNahled: $('hlaskaNahled'), hlaskaForm: $('hlaskaForm'),
     platnoVysledek: $('platnoVysledek'), rezimy: $('rezimy'), stitky: $('stitky'), generuji: $('generuji'), teckaVysledek: $('teckaVysledek'),
     kroky: [$('krok1'), $('krok2'), $('krok3')], vyberOdberatele: $('vyberOdberatele'), rozlozeni: $('rozlozeni'),
@@ -252,6 +261,9 @@
   // popisek DIČ a tvar hodnoty (CZ12345678, SK2020123456, DE123456789, ATU12345678 …)
   const RE_DIC = /(di[čc]|i[čc]\s*dph|vat(\s*(id|no\.?|number|reg\.?(istration)?))?|ust[-\s]?idnr?|tax\s*id|umsatzsteuer)/i;
   const RE_DIC_HODNOTA = /\b([A-Z]{2}\s?[0-9A-Z]{8,12})\b/;
+  // popisek IČO (ne „IČ DPH“, to je slovenské DIČ)
+  const RE_ICO = /(^|[^a-zá-ž])(i[čc]o?|reg\.?\s*(no|č)\.?|company\s*(id|no\.?)|id\.?\s*no\.?)(?!\s*dph)(?=[\s:.]|$)/i;
+  const POLE = { ico: { re: RE_ICO, nazev: 'IČO', ne: RE_DIC }, dic: { re: RE_DIC, nazev: 'DIČ', ne: null } };
 
   // z položek pdf.js postaví segmenty (řádky rozdělené na sloupce podle velkých mezer)
   // tučné písmo: z načteného fontu (pdf.js ho po vykreslení drží v commonObjs), jinak podle názvu stylu
@@ -303,28 +315,21 @@
     return radky;
   }
 
-  // najde v řádku položku s hodnotou DIČ (nebo text za dvojtečkou)
-  function hodnotaDic(radek) {
-    for (const it of radek.items) {
-      const m = RE_DIC_HODNOTA.exec(it.str.replace(/\s+/g, ' '));
-      if (m) {
-        const idx = it.str.indexOf(m[1].slice(0, 2));
-        const puvodni = it.str.slice(idx).match(/^[A-Z]{2}\s?[0-9A-Z\s]{0,13}/);
-        return { item: it, match: (puvodni ? puvodni[0] : m[1]).trim() };
-      }
-    }
-    // „DIČ: 12345“ bez prefixu země – vezme text za dvojtečkou v poslední položce
-    const posl = radek.items[radek.items.length - 1];
-    const m2 = /:\s*(\S.*)$/.exec(posl.str);
-    if (m2 && !RE_DIC.test(m2[1])) return { item: posl, match: m2[1].trim() };
-    if (radek.items.length > 1 && !RE_DIC.test(posl.str)) return { item: posl, match: posl.str.trim() };
-    return null;
+  // v textu řádku najde popisek pole (IČO / DIČ) a vrátí { prefix (text až po oddělovač), hodnota (zbytek) }, nebo null
+  function rozdelRadek(typ, text) {
+    const re = POLE[typ].re;
+    const m = re.exec(text);
+    if (!m) return null;
+    const konecPopisku = m.index + m[0].length;
+    const zbytek = text.slice(konecPopisku);
+    const odd = /^\s*[:.]?\s*/.exec(zbytek)[0];
+    return { prefix: text.slice(0, konecPopisku) + (odd.trim() ? odd.trim() + ' ' : ' '), hodnota: zbytek.slice(odd.length).trim() };
   }
 
   function najdiAutomaticky() {
     const radky = stav.radky;
     stav.adresa = [];
-    stav.dic = null;
+    stav.dic = null; stav.ico = null;
 
     // 1) popisek „Odběratel“ (řádek, který není dodavatel)
     let popisek = -1;
@@ -370,37 +375,45 @@
         if (r.y >= p.y - 0.5) continue;                       // stejný řádek jako popisek
         if (r.x < p.x - 12 || r.x > p.x + 220) continue;      // jiný sloupec
         if (posledniY - r.y > Math.max(posledniSize, r.size) * 2.6) break; // velká mezera = konec bloku
-        if (RE_KONEC.test(r.text) || RE_DIC.test(r.text)) break;
+        if (RE_KONEC.test(r.text) || RE_DIC.test(r.text) || RE_ICO.test(r.text)) break;
         stav.adresa.push(i);
         posledniY = r.y; posledniSize = r.size;
       }
     }
 
-    // 3) DIČ: nejblíž pod blokem adresy (stejný sloupec); bez bloku poslední výskyt
-    const kandidati = radky.map((r, i) => ({ r, i })).filter(({ r }) => RE_DIC.test(r.text) && !/^(i[čc]o?\b|i[čc]:)/i.test(r.text));
-    let vybrany = null;
-    if (kandidati.length) {
-      if (stav.adresa.length) {
-        const posl = radky[stav.adresa[stav.adresa.length - 1]];
-        const okoli = kandidati.filter(({ r }) => r.y < posl.y + 1 && Math.abs(r.x - posl.x) < 220).sort((a, b) => b.r.y - a.r.y);
-        vybrany = okoli[0] || null;
-      }
-      if (!vybrany) vybrany = kandidati.length > 1 ? kandidati[kandidati.length - 1] : kandidati[0];
-    }
-    if (vybrany) nastavDic(vybrany.i);
+    // 3) IČO a DIČ odběratele: nejblíž pod blokem adresy
+    najdiPole('ico');
+    najdiPole('dic');
   }
 
   // označí řádek jako řádek s DIČ; hodnota může být i v sousedním segmentu vpravo na stejné lince
-  function nastavDic(i) {
+  // označí řádek i jako řádek s polem typ (ico / dic); hodnota může být i v sousedním segmentu vpravo na stejné lince
+  function nastavPole(typ, i) {
     const r = stav.radky[i];
-    let h = hodnotaDic(r);
-    let radekHodnoty = i;
-    if (!h || RE_DIC.test(h.match)) {
-      const soused = stav.radky.findIndex((s, k) => k !== i && Math.abs(s.y - r.y) < r.size * 0.5 && s.x > r.x);
-      if (soused >= 0) { const hs = hodnotaDic(stav.radky[soused]) || { item: stav.radky[soused].items[0], match: stav.radky[soused].items[0].str.trim() }; h = hs; radekHodnoty = soused; }
+    const d = rozdelRadek(typ, r.text);
+    let radekHodnoty = i, hodnota = d ? d.hodnota : r.text, prefix = d ? d.prefix : '';
+    if (!hodnota) {
+      const soused = stav.radky.findIndex((s2, k) => k !== i && Math.abs(s2.y - r.y) < r.size * 0.5 && s2.x > r.x);
+      if (soused >= 0) { radekHodnoty = soused; hodnota = stav.radky[soused].text; prefix = ''; }
     }
-    if (!h) { const it = r.items[r.items.length - 1]; h = { item: it, match: it.str.trim() }; }
-    stav.dic = { radek: i, radekHodnoty, item: h.item, match: h.match };
+    stav[typ] = { radek: i, radekHodnoty, prefix, match: hodnota };
+  }
+  const nastavDic = (i) => nastavPole('dic', i);
+
+  // najde řádek s polem typ: nejblíž pod blokem adresy (stejný sloupec), jinak poslední výskyt v dokumentu (první bývá dodavatel)
+  function najdiPole(typ) {
+    const radky = stav.radky;
+    const re = POLE[typ].re, ne = POLE[typ].ne;
+    const kandidati = radky.map((r, i) => ({ r, i })).filter(({ r }) => re.test(r.text) && !(ne && ne.test(r.text)) && !stav.adresa.includes(radky.indexOf(r)));
+    if (!kandidati.length) return;
+    let vybrany = null;
+    if (stav.adresa.length) {
+      const posl = radky[stav.adresa[stav.adresa.length - 1]];
+      const okoli = kandidati.filter(({ r }) => r.y < posl.y + 1 && posl.y - r.y < posl.size * 12 && Math.abs(r.x - posl.x) < 220).sort((a, b) => b.r.y - a.r.y);
+      vybrany = okoli[0] || null;
+    }
+    if (!vybrany) vybrany = kandidati.length > 1 ? kandidati[kandidati.length - 1] : kandidati[0];
+    nastavPole(typ, vybrany.i);
   }
 
   /* ---------- náhled ---------- */
@@ -429,7 +442,8 @@
       const [x1, y1] = vp.convertToViewportPoint(r.x, r.y + r.size * 0.95).map((v) => v * k);
       const [x2, y2] = vp.convertToViewportPoint(r.x + r.w, r.y - r.size * 0.25).map((v) => v * k);
       const d = document.createElement('div');
-      d.className = 'radek' + (stav.adresa.includes(i) ? ' adresa' : '') + (stav.dic && (stav.dic.radek === i || stav.dic.radekHodnoty === i) ? ' dic' : '');
+      const je = (p) => stav[p] && (stav[p].radek === i || stav[p].radekHodnoty === i);
+      d.className = 'radek' + (stav.adresa.includes(i) ? ' adresa' : '') + (je('dic') ? ' dic' : '') + (je('ico') ? ' ico' : '');
       d.style.left = Math.min(x1, x2) + 'px'; d.style.top = Math.min(y1, y2) + 'px';
       d.style.width = Math.max(4, Math.abs(x2 - x1)) + 'px'; d.style.height = Math.max(4, Math.abs(y2 - y1)) + 'px';
       d.title = r.text;
@@ -444,10 +458,21 @@
       if (k >= 0) stav.adresa.splice(k, 1); else stav.adresa.push(i);
       stav.adresa.sort((a, b) => stav.radky[b].y - stav.radky[a].y || stav.radky[a].x - stav.radky[b].x);
     } else {
-      if (stav.dic && stav.dic.radek === i) stav.dic = null; else nastavDic(i);
+      const typ = stav.rezim; // 'dic' nebo 'ico'
+      if (stav[typ] && stav[typ].radek === i) stav[typ] = null; else nastavPole(typ, i);
     }
     vykresliPrekryv();
     naplnFormular();
+  }
+
+  // pod polem IČO / DIČ: co se v PDF přepíše na co
+  function infoPole() {
+    for (const typ of ['ico', 'dic']) {
+      const p = stav[typ], info = el[typ + 'Info'], nova = el[typ].value.trim();
+      if (!p) { info.textContent = POLE[typ].nazev + ' v originálu nenalezeno – ' + (nova ? 'nemám ho kam napsat, ' : '') + 'označte řádek v originálu (režim „řádek s ' + POLE[typ].nazev + '“).'; continue; }
+      const puv = stav.radky[p.radekHodnoty].text;
+      info.textContent = nova ? 'Přepíše se „' + puv + '“ → „' + (p.radek === p.radekHodnoty ? p.prefix + nova : nova) + '“' : 'Pole je prázdné – řádek „' + puv + '“ se z faktury odstraní.';
+    }
   }
 
   function stitek(trida, text) { return '<span class="stitek ' + trida + '"><i></i>' + text + '</span>'; }
@@ -457,11 +482,14 @@
     el.adresa.value = stav.adresa.map((i) => stav.radky[i].text).join('\n');
     el.tucne.checked = stav.adresa.length ? !!stav.radky[stav.adresa[0]].bold : false;
     el.dic.value = stav.dic ? stav.dic.match : '';
-    el.dicInfo.textContent = stav.dic ? 'Nalezeno v řádku: „' + stav.radky[stav.dic.radek].text + (stav.dic.radekHodnoty !== stav.dic.radek ? ' ' + stav.radky[stav.dic.radekHodnoty].text : '') + '“' : 'DIČ nenalezeno – označte řádek v originálu (režim „řádek s DIČ“).';
+    el.ico.value = stav.ico ? stav.ico.match : '';
+    infoPole();
     el.stitky.innerHTML = stitek('adresa ' + (stav.adresa.length ? 'ok' : 'chybi'), stav.adresa.length ? 'Adresa: ' + stav.adresa.length + ' řádky' : 'Adresa nenalezena')
+      + stitek('ico ' + (stav.ico ? 'ok' : 'chybi'), stav.ico ? 'IČO: ' + stav.ico.match : 'IČO nenalezeno')
       + stitek('dic ' + (stav.dic ? 'ok' : 'chybi'), stav.dic ? 'DIČ: ' + stav.dic.match : 'DIČ nenalezeno');
     const chybi = [];
     if (!stav.adresa.length) chybi.push('adresu');
+    if (!stav.ico) chybi.push('IČO');
     if (!stav.dic) chybi.push('DIČ');
     hlaska(el.hlaskaNahled, chybi.length ? 'Automaticky se nepodařilo najít ' + chybi.join(' a ') + '. Přepněte režim a označte řádky kliknutím v originálu.' : '', 'chyba');
     kroky(stav.bytes ? 1 : 0);
@@ -511,10 +539,11 @@
   async function vytvorPdf() {
     const { PDFDocument, rgb } = PDFLib;
     const noveRadky = el.adresa.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const noveDic = el.dic.value.trim();
-    if (!noveRadky.length && !noveDic) return { chyba: 'Není co přepsat – vyplňte adresu nebo DIČ.' };
-    if (noveRadky.length && !stav.adresa.length) return { chyba: 'Nevím, kam adresu napsat – označte v originálu řádky původní adresy.' };
-    if (noveDic && !stav.dic) return { chyba: 'Nevím, kam DIČ napsat – označte v originálu řádek s DIČ.' };
+    const nove = { ico: el.ico.value.trim(), dic: el.dic.value.trim() };
+    const varovani = [];
+    if (noveRadky.length && !stav.adresa.length) varovani.push('Adresu nemám kam napsat – označte v originálu řádky původní adresy.');
+    for (const typ of ['ico', 'dic']) if (nove[typ] && !stav[typ]) varovani.push(POLE[typ].nazev + ' nemám kam napsat – označte v originálu řádek s ' + POLE[typ].nazev + '.');
+    if (!stav.adresa.length && !stav.ico && !stav.dic) return { chyba: 'Není co přepsat – označte v originálu řádky adresy, IČO a DIČ.' };
 
     const fonty = await nactiFonty();
     const doc = await PDFDocument.load(stav.bytes, { ignoreEncryption: true });
@@ -528,7 +557,13 @@
     // 1) původní text odstranit přímo z obsahu PDF (aby nešel označit ani vytěžit)
     const puv = stav.adresa.map((i) => stav.radky[i]);
     const oblasti = puv.map((r) => ({ x: r.x, y: r.y, w: r.w, size: r.size }));
-    if (noveDic && stav.dic) { const it = stav.dic.item; oblasti.push({ x: it.x, y: it.y, w: it.w, size: it.size }); }
+    const poleOblasti = {};
+    for (const typ of ['ico', 'dic']) {
+      if (!stav[typ]) continue;
+      const seg = stav.radky[stav[typ].radekHodnoty];
+      poleOblasti[typ] = oblasti.length;
+      oblasti.push({ x: seg.x, y: seg.y, w: seg.w, size: seg.size });
+    }
     let pocty = oblasti.map(() => 0);
     try { pocty = await FKObsah.odstranText(doc, page, oblasti); } catch (e) { console.warn('odstranění textu selhalo', e); }
     const odstraneno = pocty.reduce((a, b) => a + b, 0);
@@ -557,18 +592,20 @@
       });
     }
 
-    // DIČ: jen položka s hodnotou, napsaná znovu s novou hodnotou
-    if (noveDic && stav.dic) {
-      const it = stav.dic.item;
-      const size = vlastniVelikost > 0 ? vlastniVelikost : it.size;
-      const novy = it.str.includes(stav.dic.match) ? it.str.replace(stav.dic.match, noveDic) : noveDic;
-      const font = it.bold ? fBold : fRegular;
-      const w = Math.max(it.w, font.widthOfTextAtSize(novy, size));
-      zabil(oblasti.length - 1, it.x, it.y, w, it.size);
-      page.drawText(novy, { x: it.x, y: it.y, size, font, color: cerna });
+    // IČO a DIČ: celý segment s hodnotou se napíše znovu – popisek + nová hodnota (prázdné pole = řádek se jen odstraní)
+    for (const typ of ['ico', 'dic']) {
+      const p = stav[typ];
+      if (!p) continue;
+      const seg = stav.radky[p.radekHodnoty];
+      const size = vlastniVelikost > 0 ? vlastniVelikost : seg.size;
+      const font = seg.bold ? fBold : fRegular;
+      const text = nove[typ] ? (p.radek === p.radekHodnoty ? p.prefix + nove[typ] : nove[typ]) : '';
+      const w = Math.max(seg.w, text ? font.widthOfTextAtSize(text, size) : 0);
+      zabil(poleOblasti[typ], seg.x, seg.y, w, seg.size);
+      if (text) page.drawText(text, { x: seg.x, y: seg.y, size, font, color: cerna });
     }
 
-    return { bytes: await doc.save(), odstraneno, neodstraneno };
+    return { bytes: await doc.save(), odstraneno, neodstraneno, varovani };
   }
 
   /* ---------- živý náhled výsledku ---------- */
@@ -595,7 +632,8 @@
       await vykresliVysledek(v.bytes);
       if (beh !== stav.generace) return;
       el.stahnout.disabled = false; el.generuji.textContent = 'aktuální'; el.teckaVysledek.classList.add('zivy');
-      hlaska(el.hlaskaForm, !v.neodstraneno ? 'Náhled je aktuální. Původní text bude z PDF odstraněn.' : v.odstraneno ? 'Část původního textu se nepodařilo z PDF odstranit, bude jen překrytá bílou plochou.' : 'Původní text se nepodařilo z PDF odstranit, bude jen překrytý bílou plochou.', !v.neodstraneno ? 'ok' : 'chyba');
+      const zprava = !v.neodstraneno ? 'Náhled je aktuální. Původní text bude z PDF odstraněn.' : v.odstraneno ? 'Část původního textu se nepodařilo z PDF odstranit, bude jen překrytá bílou plochou.' : 'Původní text se nepodařilo z PDF odstranit, bude jen překrytý bílou plochou.';
+      hlaska(el.hlaskaForm, (v.varovani.length ? v.varovani.join(' ') + ' ' : '') + zprava, v.varovani.length || v.neodstraneno ? 'chyba' : 'ok');
       kroky(2);
     } catch (e) {
       console.error(e);
@@ -638,7 +676,9 @@
     const o = (window.ODBERATELE || [])[Number(el.vyberOdberatele.value)];
     if (!o) return;
     el.adresa.value = o.radky.join('\n');
+    el.ico.value = o.ico || '';
     el.dic.value = o.dic || '';
+    infoPole();
     naplanujNahled();
   });
   el.stahnout.addEventListener('click', stahnout);
@@ -650,14 +690,15 @@
   });
   try { if (localStorage.getItem('faktura.rozlozeni') === 'podSebou') { el.nahledy.classList.add('podSebou'); el.rozlozeni.textContent = 'Vedle sebe'; } } catch (e) { /* bez úložiště */ }
   el.znovuNajit.addEventListener('click', () => { najdiAutomaticky(); vykresliPrekryv(); naplnFormular(); });
-  el.zrusitVyber.addEventListener('click', () => { stav.adresa = []; stav.dic = null; vykresliPrekryv(); naplnFormular(); });
+  el.zrusitVyber.addEventListener('click', () => { stav.adresa = []; stav.dic = null; stav.ico = null; vykresliPrekryv(); naplnFormular(); });
   el.rezimy.querySelectorAll('button[data-rezim]').forEach((b) => b.addEventListener('click', () => {
     stav.rezim = b.dataset.rezim;
     el.rezimy.querySelectorAll('button[data-rezim]').forEach((x) => x.classList.toggle('aktivni', x === b));
   }));
   el.adresa.addEventListener('input', () => { el.vyberOdberatele.value = ''; });
-  el.dic.addEventListener('input', () => { el.vyberOdberatele.value = ''; });
-  ['input', 'change'].forEach((u) => { el.adresa.addEventListener(u, naplanujNahled); el.dic.addEventListener(u, naplanujNahled); el.tucne.addEventListener(u, naplanujNahled); el.velikost.addEventListener(u, naplanujNahled); });
+  el.dic.addEventListener('input', () => { el.vyberOdberatele.value = ''; infoPole(); });
+  el.ico.addEventListener('input', () => { el.vyberOdberatele.value = ''; infoPole(); });
+  ['input', 'change'].forEach((u) => { el.adresa.addEventListener(u, naplanujNahled); el.dic.addEventListener(u, naplanujNahled); el.ico.addEventListener(u, naplanujNahled); el.tucne.addEventListener(u, naplanujNahled); el.velikost.addEventListener(u, naplanujNahled); });
   // přetažení souboru na stránku
   document.addEventListener('dragover', (e) => { e.preventDefault(); el.drop.classList.add('tazeni'); });
   document.addEventListener('dragleave', () => el.drop.classList.remove('tazeni'));

@@ -1,12 +1,13 @@
 # Faktura – přepsání odběratele
 
-Jednoduchá stránka: ručně se vybere PDF faktura, na 1. straně se najde **adresa a DIČ odběratele**,
-oba údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
+Jednoduchá stránka: ručně se vybere PDF faktura, na 1. straně se najde **adresa, IČO a DIČ odběratele**,
+všechny údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
 
 - Všechno běží **jen v prohlížeči** – faktura se nikam neodesílá, žádný server, databáze ani Make.
 - Adresa se hledá podle popisku (Odběratel, Kupující, Zákazník, Příjemce, Bill to, Customer …),
-  DIČ podle popisku DIČ / VAT ID / IČ DPH nejblíž pod adresou (DIČ dodavatele se přeskočí).
-- Když se blok najde špatně, řádky se označí kliknutím v náhledu (režim „řádek adresy“ / „řádek s DIČ“).
+  IČO a DIČ podle popisku (IČO / IČ, DIČ / VAT ID / IČ DPH) nejblíž pod adresou (údaje dodavatele se přeskočí).
+  Řádek s IČO a DIČ se přepíše celý (popisek + nová hodnota); prázdné pole řádek z faktury odstraní.
+- Když se blok najde špatně, řádky se označí kliknutím v náhledu (režim „řádek adresy“ / „řádek s IČO“ / „řádek s DIČ“).
 - Původní text se z obsahu PDF **odstraní** (textové operátory se nahradí posunem stejné šířky, viz
   `public/prepis-obsahu.js`), ne jen překryje – v novém souboru nejde označit ani vytěžit.
   Kde se odstranit nepodaří, překryje se bílou plochou a stránka to ohlásí.
@@ -14,8 +15,8 @@ oba údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
   naskenované obrázky ne.
 
 - Náhled výsledku je hned vedle originálu a přepisuje se sám při každé úpravě; stažení až tlačítkem.
-- **Předvolení odběratelé** – nabídka „Vybrat odběratele“ vyplní adresu i DIČ. Seznam je v `public/odberatele.js`
-  (název, řádky adresy, DIČ); další odběratel = další položka v poli.
+- **Předvolení odběratelé** – nabídka „Vybrat odběratele“ vyplní adresu, IČO i DIČ. Seznam je v `public/odberatele.js`
+  (název, řádky adresy, IČO, DIČ); další odběratel = další položka v poli.
 
 ## Soubory
 
