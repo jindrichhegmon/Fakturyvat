@@ -227,6 +227,7 @@
     dic: [],            // řádky s DIČ: totéž
     rezim: 'adresa',
     fonty: null,        // { regular, bold } ArrayBuffer
+    cary: [],           // svislé čáry rámečků na 1. straně: { x, y0, y1 } (uživatelský prostor)
     vysledek: null,     // { bytes, nazev } – naposledy vygenerované PDF (pro stažení)
     generace: 0,        // číslo běhu náhledu (zahazuje zastaralé výsledky)
   };
@@ -465,6 +466,42 @@
     najdiPole('dic');
   }
 
+  // svislé čáry (rámečky, tabulky) z kresby stránky – nový text se nemá dostat přes ně
+  async function najdiCary() {
+    const cary = [];
+    try {
+      const ops = await stav.strana.getOperatorList();
+      const O = pdfjsLib.OPS;
+      let ctm = [1, 0, 0, 1, 0, 0]; const zasobnik = [];
+      const mul = (m, n) => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3], m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
+      const bod = (x, y) => [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]];
+      const svisla = (a, b) => { if (Math.abs(a[0] - b[0]) < 0.6 && Math.abs(a[1] - b[1]) > 2) cary.push({ x: a[0], y0: Math.min(a[1], b[1]), y1: Math.max(a[1], b[1]) }); };
+      for (let i = 0; i < ops.fnArray.length; i++) {
+        const fn = ops.fnArray[i], args = ops.argsArray[i];
+        if (fn === O.save) zasobnik.push(ctm);
+        else if (fn === O.restore) ctm = zasobnik.pop() || ctm;
+        else if (fn === O.transform) ctm = mul(args, ctm);
+        else if (fn === O.constructPath) {
+          const [kody, souradnice] = args; let k = 0; let akt = null;
+          for (const kod of kody) {
+            if (kod === O.moveTo) { akt = bod(souradnice[k], souradnice[k + 1]); k += 2; }
+            else if (kod === O.lineTo) { const n = bod(souradnice[k], souradnice[k + 1]); k += 2; if (akt) svisla(akt, n); akt = n; }
+            else if (kod === O.curveTo) { k += 6; akt = bod(souradnice[k - 2], souradnice[k - 1]); }
+            else if (kod === O.curveTo2 || kod === O.curveTo3) { k += 4; akt = bod(souradnice[k - 2], souradnice[k - 1]); }
+            else if (kod === O.rectangle) {
+              const [x, y, w, h] = souradnice.slice(k, k + 4); k += 4;
+              const a = bod(x, y), b = bod(x + w, y), c = bod(x + w, y + h), d = bod(x, y + h);
+              if (Math.abs(b[0] - a[0]) < 1.5) svisla(a, d); // tenký obdélník = svislá čára
+              else { svisla(a, d); svisla(b, c); }
+              akt = a;
+            } else if (kod === O.closePath) { /* nic */ }
+          }
+        }
+      }
+    } catch (e) { console.warn('čáry rámečků se nenačetly', e); }
+    stav.cary = cary;
+  }
+
   /* ---------- náhled ---------- */
   async function vykresli() {
     const rodic = el.nahledy.parentElement;
@@ -567,6 +604,7 @@
       stav.radky = []; stav.adresa = []; stav.ico = []; stav.dic = [];
       await pripravMereni();
       await vykresli(); // nejdřív vykreslit – načtou se fonty (kvůli rozpoznání tučného písma)
+      await najdiCary();
       stav.radky = postavRadky(content);
       najdiAutomaticky();
       vykresliPrekryv();
@@ -617,6 +655,9 @@
       for (const c of vsechnyCasti) {
         if (seg.items.includes(c)) continue;
         if (Math.abs(c.y - seg.y) < seg.size * 0.5 && c.x > x + 1 && c.x < hranice) hranice = c.x - 3;
+      }
+      for (const l of stav.cary) { // svislá čára rámečku vpravo na výšce řádku
+        if (l.x > x + 1 && l.x - 3 < hranice && seg.y > l.y0 - seg.size * 0.3 && seg.y < l.y1 + seg.size * 0.3) hranice = l.x - 3;
       }
       return Math.max(hranice - x, seg.w * 0.6, 20);
     };
