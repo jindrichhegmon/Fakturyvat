@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faktura – přepsání odběratele</title>
+<title>Faktury – přepsání odběratele</title>
 <!--
   Jednoduchá aplikace: načte PDF fakturu, najde adresu a DIČ odběratele, nechá je upravit
-  a zapíše je zpět do PDF (původní text se překryje bílou plochou a přepíše).
+  a zapíše je zpět do PDF (původní text se z obsahu PDF odstraní, nový se napíše na stejné místo).
   Všechno běží jen v prohlížeči – faktura se nikam neodesílá.
   Knihovny: pdf.js (čtení textu + náhled), pdf-lib + fontkit (zápis), font Liberation Sans (česká diakritika).
 -->
@@ -14,96 +14,192 @@
 <script src="lib/pdf-lib.min.js"></script>
 <script src="lib/fontkit.umd.min.js"></script>
 <script src="prepis-obsahu.js"></script>
+<script src="odberatele.js"></script>
 <style>
-  :root { --modra: #1f6feb; --zelena: #1a7f37; --seda: #666; --okraj: #d0d7de; --pozadi: #f6f8fa; }
+  :root {
+    --akcent: #0f766e; --akcent-tmavy: #115e59; --akcent-svetly: #ccfbf1;
+    --modra: #2563eb; --modra-svetla: rgba(37,99,235,.18);
+    --zelena: #16a34a; --zelena-svetla: rgba(22,163,74,.22);
+    --text: #1e293b; --text-tlumeny: #64748b; --okraj: #e2e8f0; --pozadi: #f1f5f9; --karta: #fff;
+    --stin: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -12px rgba(15,23,42,.18);
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #222; background: var(--pozadi); }
-  header { background: #fff; border-bottom: 1px solid var(--okraj); padding: 10px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 18px; margin: 0; }
-  header .verze { color: var(--seda); font-size: 12px; }
-  main { display: grid; grid-template-columns: minmax(320px, 1fr) 380px; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  .panel { background: #fff; border: 1px solid var(--okraj); border-radius: 8px; padding: 14px; }
-  .panel h2 { font-size: 15px; margin: 0 0 10px; }
-  label { display: block; font-weight: 600; margin: 12px 0 4px; }
-  label small { font-weight: 400; color: var(--seda); }
-  textarea, input[type=text] { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid var(--okraj); border-radius: 6px; }
-  textarea { min-height: 120px; resize: vertical; }
-  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--okraj); background: #fff; cursor: pointer; }
-  button.hlavni { background: var(--modra); color: #fff; border-color: var(--modra); font-weight: 600; }
-  button:disabled { opacity: .5; cursor: default; }
-  button.aktivni { outline: 2px solid currentColor; }
-  .rezim { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; align-items: center; }
-  .rezim .adresa { color: var(--modra); }
-  .rezim .dic { color: var(--zelena); }
-  .nahled { position: relative; display: inline-block; max-width: 100%; border: 1px solid var(--okraj); background: #fff; }
-  .nahled canvas { display: block; max-width: 100%; height: auto; }
+  html, body { margin: 0; }
+  body { font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--text); background: var(--pozadi); }
+  header { background: linear-gradient(135deg, #0f766e 0%, #0e7490 60%, #1d4ed8 100%); color: #fff; padding: 22px 24px 26px; }
+  header .vnitrek { max-width: 1480px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 22px; margin: 0; letter-spacing: .2px; display: flex; align-items: center; gap: 10px; }
+  header h1 svg { width: 28px; height: 28px; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+  .kroky { display: flex; gap: 6px; flex-wrap: wrap; }
+  .krok { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px; background: rgba(255,255,255,.14); font-size: 13px; font-weight: 600; }
+  .krok b { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,.25); font-size: 12px; }
+  .krok.hotovo b { background: #fff; color: var(--akcent-tmavy); }
+  .krok.hotovo b::before { content: "✓"; }
+  .krok:not(.hotovo) b::before { content: attr(data-n); }
+  main { max-width: 1480px; margin: -14px auto 40px; padding: 0 16px; display: grid; grid-template-columns: minmax(360px, 1fr) 400px; gap: 18px; align-items: start; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .karta { background: var(--karta); border: 1px solid var(--okraj); border-radius: 14px; box-shadow: var(--stin); padding: 18px; }
+  .karta h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-tlumeny); }
+  .karta h2 .cislo { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--akcent-svetly); color: var(--akcent-tmavy); font-size: 12px; }
+  /* nahrání */
+  .drop { border: 2px dashed #94a3b8; border-radius: 14px; padding: 28px 18px; text-align: center; cursor: pointer; transition: all .15s; background: #f8fafc; }
+  .drop:hover, .drop.tazeni { border-color: var(--akcent); background: var(--akcent-svetly); }
+  .drop svg { width: 40px; height: 40px; color: var(--akcent); margin-bottom: 6px; }
+  .drop strong { display: block; font-size: 16px; }
+  .drop span { color: var(--text-tlumeny); font-size: 13px; }
+  .drop input { display: none; }
+  .soubor { display: none; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid var(--okraj); }
+  .soubor.zobrazen { display: flex; }
+  .soubor .ikona { width: 34px; height: 34px; border-radius: 8px; background: #fee2e2; color: #b91c1c; display: grid; place-items: center; font-weight: 700; font-size: 11px; }
+  .soubor .nazev { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .soubor button { padding: 6px 10px; font-size: 13px; }
+  /* stavové štítky */
+  .stitky { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+  .stitek { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #f1f5f9; color: var(--text-tlumeny); border: 1px solid var(--okraj); }
+  .stitek.ok { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+  .stitek.chybi { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .stitek i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .stitek.adresa i { background: var(--modra); } .stitek.dic i { background: var(--zelena); }
+  /* náhledy */
+  .listy { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .rezim { display: inline-flex; border: 1px solid var(--okraj); border-radius: 10px; overflow: hidden; }
+  .rezim button { border: 0; border-radius: 0; padding: 7px 12px; background: #fff; font-weight: 600; color: var(--text-tlumeny); }
+  .rezim button + button { border-left: 1px solid var(--okraj); }
+  .rezim button.aktivni.adresa { background: var(--modra); color: #fff; }
+  .rezim button.aktivni.dic { background: var(--zelena); color: #fff; }
+  .napoveda { color: var(--text-tlumeny); font-size: 13px; margin: 0; }
+  .nahledy { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+  .nahledy.podSebou { grid-template-columns: 1fr; }
+  .list { min-width: 0; }
+  .list .titulek { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+  .list .titulek .tecka { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; display: inline-block; margin-right: 6px; }
+  .list .titulek .tecka.zivy { background: var(--zelena); box-shadow: 0 0 0 4px rgba(22,163,74,.18); }
+  .papir { position: relative; display: inline-block; max-width: 100%; border: 1px solid var(--okraj); border-radius: 6px; background: #fff; box-shadow: 0 2px 12px rgba(15,23,42,.08); overflow: hidden; }
+  .papir canvas { display: block; max-width: 100%; height: auto; }
   .prekryv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
-  .radek { position: absolute; cursor: pointer; border: 1px solid transparent; border-radius: 2px; }
-  .radek:hover { border-color: #999; background: rgba(0,0,0,.05); }
-  .radek.adresa { background: rgba(31,111,235,.22); border-color: var(--modra); }
-  .radek.dic { background: rgba(26,127,55,.25); border-color: var(--zelena); }
-  .radek.oznaceny { outline: 2px solid var(--modra); }
-  .hlaska { padding: 8px 10px; border-radius: 6px; margin: 8px 0; font-size: 14px; }
-  .hlaska.info { background: #eef4ff; color: #1b3a7a; }
-  .hlaska.chyba { background: #ffecec; color: #8a1c1c; }
-  .hlaska.ok { background: #e9f7ee; color: #14532d; }
-  .napoveda { color: var(--seda); font-size: 13px; }
-  .vysledek { margin-top: 16px; }
-  .vysledek canvas { max-width: 100%; height: auto; border: 1px solid var(--okraj); }
-  .radekTlacitek { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .inline { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-weight: 400; }
-  .inline input { width: 80px; }
-  .skryty { display: none; }
+  .radek { position: absolute; cursor: pointer; border: 1px solid transparent; border-radius: 3px; transition: background .1s; }
+  .radek:hover { border-color: #94a3b8; background: rgba(15,23,42,.06); }
+  .radek.adresa { background: var(--modra-svetla); border-color: var(--modra); }
+  .radek.dic { background: var(--zelena-svetla); border-color: var(--zelena); }
+  .prazdny { border: 1px dashed var(--okraj); border-radius: 10px; padding: 40px 16px; text-align: center; color: var(--text-tlumeny); background: #f8fafc; }
+  .prazdny.skryty, .skryty { display: none !important; }
+  .generuji { font-size: 12px; font-weight: 500; color: var(--text-tlumeny); }
+  /* formulář */
+  label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; }
+  label small { font-weight: 400; color: var(--text-tlumeny); }
+  select { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
+  select:focus { outline: none; border-color: var(--akcent); box-shadow: 0 0 0 3px rgba(15,118,110,.18); }
+  textarea, input[type=text] { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; transition: box-shadow .15s, border-color .15s; }
+  textarea:focus, input[type=text]:focus { outline: none; border-color: var(--akcent); box-shadow: 0 0 0 3px rgba(15,118,110,.18); }
+  textarea { min-height: 130px; resize: vertical; line-height: 1.45; }
+  .radekVoleb { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
+  .radekVoleb label { margin: 0; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+  .radekVoleb input[type=text] { width: 70px; padding: 5px 8px; }
+  .radekVoleb input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--akcent); }
+  button { font: inherit; padding: 9px 14px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; color: var(--text); transition: background .12s, transform .05s; }
+  button:hover { background: #f8fafc; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  button.hlavni { background: var(--akcent); color: #fff; border-color: var(--akcent); font-weight: 700; padding: 12px 18px; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; box-shadow: 0 6px 16px -8px rgba(15,118,110,.7); }
+  button.hlavni:hover { background: var(--akcent-tmavy); }
+  button.hlavni svg { width: 18px; height: 18px; }
+  .tlacitka { display: grid; gap: 8px; margin-top: 18px; }
+  .hlaska { padding: 10px 12px; border-radius: 10px; margin: 12px 0 0; font-size: 14px; line-height: 1.4; }
+  .hlaska.info { background: #eff6ff; color: #1e3a8a; }
+  .hlaska.chyba { background: #fef2f2; color: #991b1b; }
+  .hlaska.ok { background: #f0fdf4; color: #14532d; }
+  .hlaska:empty { display: none; }
+  footer { max-width: 1480px; margin: 0 auto 30px; padding: 0 16px; color: var(--text-tlumeny); font-size: 12px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Faktura – přepsání odběratele</h1>
-  <span class="verze">v1.0 · vše běží jen v prohlížeči, PDF se nikam neposílá</span>
-  <input type="file" id="soubor" accept="application/pdf,.pdf">
+  <div class="vnitrek">
+    <div>
+      <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>Faktury – přepsání odběratele</h1>
+      <p>Načtěte PDF fakturu, upravte adresu a DIČ odběratele a stáhněte nové PDF. Vše běží jen ve vašem prohlížeči, soubor se nikam neposílá.</p>
+    </div>
+    <div class="kroky">
+      <span class="krok" id="krok1"><b data-n="1"></b>Načíst fakturu</span>
+      <span class="krok" id="krok2"><b data-n="2"></b>Zkontrolovat a upravit</span>
+      <span class="krok" id="krok3"><b data-n="3"></b>Stáhnout výsledek</span>
+    </div>
+  </div>
 </header>
 
 <main>
-  <section class="panel">
-    <h2>Náhled faktury (1. strana)</h2>
-    <div id="hlaskaNahled" class="hlaska info">Vyberte PDF fakturu nahoře. Adresa a DIČ odběratele se najdou automaticky; když se najdou špatně, klikáním na řádky v náhledu je označte ručně.</div>
-    <div class="rezim" id="rezimy">
-      <span>Kliknutím na řádek označím:</span>
-      <button type="button" class="adresa aktivni" data-rezim="adresa">řádek adresy</button>
-      <button type="button" class="dic" data-rezim="dic">řádek s DIČ</button>
-      <button type="button" id="zrusitVyber">Zrušit výběr</button>
+  <section class="karta">
+    <h2><span class="cislo">1</span> Faktura</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="soubor" accept="application/pdf,.pdf">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+      <strong>Přetáhněte PDF fakturu sem</strong>
+      <span>nebo klikněte a vyberte soubor z počítače</span>
+    </label>
+    <div class="soubor" id="souborInfo">
+      <span class="ikona">PDF</span>
+      <span class="nazev" id="souborNazev"></span>
+      <button type="button" id="jinySoubor">Jiný soubor</button>
     </div>
-    <div class="nahled" id="nahled">
-      <canvas id="platno"></canvas>
-      <div class="prekryv" id="prekryv"></div>
+    <div class="stitky" id="stitky"></div>
+    <div class="hlaska" id="hlaskaNahled"></div>
+
+    <h2 style="margin-top:22px"><span class="cislo">2</span> Náhled</h2>
+    <div class="listy">
+      <span class="napoveda">Kliknutím na řádek v originálu označím:</span>
+      <span class="rezim" id="rezimy">
+        <button type="button" class="adresa aktivni" data-rezim="adresa">řádek adresy</button>
+        <button type="button" class="dic" data-rezim="dic">řádek s DIČ</button>
+      </span>
+      <button type="button" id="znovuNajit" disabled>Najít znovu</button>
+      <button type="button" id="zrusitVyber" disabled>Zrušit výběr</button>
+      <button type="button" id="rozlozeni" title="Přepne náhledy vedle sebe / pod sebou (větší)">Pod sebou (větší)</button>
     </div>
-    <p class="napoveda">Modře = řádky adresy odběratele (v pořadí, jak jdou pod sebou), zeleně = řádek s DIČ odběratele. Kliknutím označení přidáte nebo odeberete.</p>
-    <div class="vysledek skryty" id="vysledek">
-      <h2>Výsledek po přepsání</h2>
-      <canvas id="platnoVysledek"></canvas>
+    <div class="prazdny" id="prazdny">Zatím není načtená žádná faktura.</div>
+    <div class="nahledy skryty" id="nahledy">
+      <div class="list">
+        <div class="titulek"><span><span class="tecka"></span>Originál</span><span class="napoveda">modře adresa · zeleně DIČ</span></div>
+        <div class="papir" id="nahled">
+          <canvas id="platno"></canvas>
+          <div class="prekryv" id="prekryv"></div>
+        </div>
+      </div>
+      <div class="list">
+        <div class="titulek"><span><span class="tecka" id="teckaVysledek"></span>Výsledek</span><span class="generuji" id="generuji"></span></div>
+        <div class="papir">
+          <canvas id="platnoVysledek"></canvas>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="panel">
-    <h2>Odběratel</h2>
+  <section class="karta">
+    <h2><span class="cislo">3</span> Odběratel</h2>
+    <label for="vyberOdberatele">Vybrat odběratele <small>(vyplní adresu i DIČ)</small></label>
+    <select id="vyberOdberatele"><option value="">— vlastní / podle faktury —</option></select>
     <label for="adresa">Adresa odběratele <small>(každý řádek zvlášť: název, ulice, město…)</small></label>
     <textarea id="adresa" placeholder="Firma s.r.o.&#10;Ulice 123&#10;110 00 Praha 1"></textarea>
-    <div class="inline"><input type="checkbox" id="tucne" style="width:auto"> <label for="tucne" style="margin:0">První řádek tučně</label></div>
+    <div class="radekVoleb">
+      <label><input type="checkbox" id="tucne"> První řádek tučně</label>
+      <label>Velikost písma <input type="text" id="velikost" placeholder="auto"> <small>pt</small></label>
+    </div>
 
     <label for="dic">DIČ odběratele</label>
-    <input type="text" id="dic" placeholder="CZ12345678">
-    <div class="napoveda" id="dicInfo"></div>
+    <input type="text" id="dic" placeholder="CZ12345678" autocomplete="off">
+    <p class="napoveda" id="dicInfo" style="margin-top:6px"></p>
 
-    <div class="inline"><label for="velikost" style="margin:0">Velikost písma</label> <input type="text" id="velikost" placeholder="auto"> <span class="napoveda">pt, prázdné = jako v originálu</span></div>
-
-    <div class="radekTlacitek">
-      <button type="button" class="hlavni" id="prepsat" disabled>Přepsat PDF a stáhnout</button>
-      <button type="button" id="znovuNajit" disabled>Najít znovu automaticky</button>
+    <div class="tlacitka">
+      <button type="button" class="hlavni" id="stahnout" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Stáhnout upravené PDF
+      </button>
     </div>
-    <div id="hlaskaForm"></div>
+    <div class="hlaska" id="hlaskaForm"></div>
+    <p class="napoveda" style="margin-top:14px">Náhled výsledku vpravo v části Náhled se přepisuje sám při každé úpravě. Stažený soubor se jmenuje <em>název-upraveno.pdf</em>, originál zůstane beze změny.</p>
   </section>
 </main>
+<footer>Faktury – přepsání odběratele · v1.1 · pdf.js, pdf-lib, Liberation Sans · zpracování probíhá jen v prohlížeči.</footer>
 
 <script>
 (function () {
@@ -122,21 +218,30 @@
     dic: null,          // { radek, item, match } – řádek s DIČ, položka s hodnotou a nalezená hodnota
     rezim: 'adresa',
     fonty: null,        // { regular, bold } ArrayBuffer
+    vysledek: null,     // { bytes, nazev } – naposledy vygenerované PDF (pro stažení)
+    generace: 0,        // číslo běhu náhledu (zahazuje zastaralé výsledky)
   };
 
   const $ = (id) => document.getElementById(id);
   const el = {
-    soubor: $('soubor'), platno: $('platno'), prekryv: $('prekryv'), nahled: $('nahled'),
+    soubor: $('soubor'), drop: $('drop'), souborInfo: $('souborInfo'), souborNazev: $('souborNazev'), jinySoubor: $('jinySoubor'),
+    platno: $('platno'), prekryv: $('prekryv'), nahled: $('nahled'), nahledy: $('nahledy'), prazdny: $('prazdny'),
     adresa: $('adresa'), dic: $('dic'), dicInfo: $('dicInfo'), tucne: $('tucne'), velikost: $('velikost'),
-    prepsat: $('prepsat'), znovuNajit: $('znovuNajit'), hlaskaNahled: $('hlaskaNahled'), hlaskaForm: $('hlaskaForm'),
-    vysledek: $('vysledek'), platnoVysledek: $('platnoVysledek'), rezimy: $('rezimy'), zrusitVyber: $('zrusitVyber'),
+    stahnout: $('stahnout'), znovuNajit: $('znovuNajit'), zrusitVyber: $('zrusitVyber'), hlaskaNahled: $('hlaskaNahled'), hlaskaForm: $('hlaskaForm'),
+    platnoVysledek: $('platnoVysledek'), rezimy: $('rezimy'), stitky: $('stitky'), generuji: $('generuji'), teckaVysledek: $('teckaVysledek'),
+    kroky: [$('krok1'), $('krok2'), $('krok3')], vyberOdberatele: $('vyberOdberatele'), rozlozeni: $('rozlozeni'),
   };
+
+  /* ---------- předvolení odběratelé (odberatele.js) ---------- */
+  (window.ODBERATELE || []).forEach((o, i) => {
+    const opt = document.createElement('option'); opt.value = String(i); opt.textContent = o.nazev; el.vyberOdberatele.appendChild(opt);
+  });
 
   function hlaska(kam, text, typ) {
     kam.className = 'hlaska ' + (typ || 'info');
-    kam.textContent = text;
-    kam.style.display = text ? '' : 'none';
+    kam.textContent = text || '';
   }
+  function kroky(n) { el.kroky.forEach((k, i) => k.classList.toggle('hotovo', i < n)); }
 
   /* ---------- rozpoznávání ---------- */
   // popisek bloku odběratele (bez dodavatele)
@@ -300,7 +405,7 @@
 
   /* ---------- náhled ---------- */
   async function vykresli() {
-    const rodic = el.nahled.parentElement;
+    const rodic = el.nahledy.parentElement;
     const sirka = Math.min(rodic.clientWidth - 2 * (parseFloat(getComputedStyle(rodic).paddingLeft) || 0) - 2, 900);
     const v1 = stav.strana.getViewport({ scale: 1 });
     const scale = Math.max(0.6, Math.min(2, sirka / v1.width));
@@ -309,6 +414,8 @@
     const c = el.platno;
     c.width = Math.floor(viewport.width); c.height = Math.floor(viewport.height);
     c.style.width = c.width + 'px'; c.style.height = 'auto';
+    el.platnoVysledek.width = c.width; el.platnoVysledek.height = c.height;
+    el.platnoVysledek.style.width = c.width + 'px'; el.platnoVysledek.style.height = 'auto';
     await stav.strana.render({ canvasContext: c.getContext('2d'), viewport }).promise;
     vykresliPrekryv();
   }
@@ -343,24 +450,34 @@
     naplnFormular();
   }
 
+  function stitek(trida, text) { return '<span class="stitek ' + trida + '"><i></i>' + text + '</span>'; }
+
   function naplnFormular() {
+    el.vyberOdberatele.value = '';
     el.adresa.value = stav.adresa.map((i) => stav.radky[i].text).join('\n');
     el.tucne.checked = stav.adresa.length ? !!stav.radky[stav.adresa[0]].bold : false;
     el.dic.value = stav.dic ? stav.dic.match : '';
-    el.dicInfo.textContent = stav.dic ? 'Nalezeno v řádku: „' + stav.radky[stav.dic.radek].text + (stav.dic.radekHodnoty !== stav.dic.radek ? ' ' + stav.radky[stav.dic.radekHodnoty].text : '') + '“' : 'DIČ nenalezeno – označte řádek v náhledu (režim „řádek s DIČ“).';
-    el.prepsat.disabled = !stav.bytes;
+    el.dicInfo.textContent = stav.dic ? 'Nalezeno v řádku: „' + stav.radky[stav.dic.radek].text + (stav.dic.radekHodnoty !== stav.dic.radek ? ' ' + stav.radky[stav.dic.radekHodnoty].text : '') + '“' : 'DIČ nenalezeno – označte řádek v originálu (režim „řádek s DIČ“).';
+    el.stitky.innerHTML = stitek('adresa ' + (stav.adresa.length ? 'ok' : 'chybi'), stav.adresa.length ? 'Adresa: ' + stav.adresa.length + ' řádky' : 'Adresa nenalezena')
+      + stitek('dic ' + (stav.dic ? 'ok' : 'chybi'), stav.dic ? 'DIČ: ' + stav.dic.match : 'DIČ nenalezeno');
     const chybi = [];
-    if (!stav.adresa.length) chybi.push('adresa');
+    if (!stav.adresa.length) chybi.push('adresu');
     if (!stav.dic) chybi.push('DIČ');
-    hlaska(el.hlaskaNahled, chybi.length ? 'Automaticky se nepodařilo najít: ' + chybi.join(', ') + '. Označte řádky kliknutím v náhledu.' : 'Adresa i DIČ odběratele nalezeny – zkontrolujte označení v náhledu a upravte text vpravo.', chybi.length ? 'chyba' : 'ok');
+    hlaska(el.hlaskaNahled, chybi.length ? 'Automaticky se nepodařilo najít ' + chybi.join(' a ') + '. Přepněte režim a označte řádky kliknutím v originálu.' : '', 'chyba');
+    kroky(stav.bytes ? 1 : 0);
+    naplanujNahled();
   }
 
   /* ---------- načtení souboru ---------- */
   async function nacti(file) {
     try {
       hlaska(el.hlaskaForm, '', 'info');
-      el.vysledek.classList.add('skryty');
+      stav.vysledek = null; stav.generace++;
+      el.stahnout.disabled = true;
       stav.nazev = file.name;
+      el.souborNazev.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' kB)';
+      el.souborInfo.classList.add('zobrazen'); el.drop.classList.add('skryty');
+      el.prazdny.classList.add('skryty'); el.nahledy.classList.remove('skryty');
       stav.bytes = new Uint8Array(await file.arrayBuffer());
       stav.pdf = await pdfjsLib.getDocument({ data: stav.bytes.slice() }).promise;
       stav.strana = await stav.pdf.getPage(1);
@@ -370,16 +487,16 @@
       stav.radky = postavRadky(content);
       najdiAutomaticky();
       vykresliPrekryv();
+      el.znovuNajit.disabled = false; el.zrusitVyber.disabled = false;
       naplnFormular();
       if (!stav.radky.length) hlaska(el.hlaskaNahled, 'V PDF není žádný text (nejspíš naskenovaný obrázek) – přepsat jde jen textová PDF.', 'chyba');
-      el.znovuNajit.disabled = false;
     } catch (e) {
       console.error(e);
       hlaska(el.hlaskaNahled, 'PDF se nepodařilo načíst: ' + (e.message || e), 'chyba');
     }
   }
 
-  /* ---------- přepsání PDF ---------- */
+  /* ---------- vytvoření nového PDF ---------- */
   async function nactiFonty() {
     if (stav.fonty) return stav.fonty;
     const [regular, bold] = await Promise.all([
@@ -390,83 +507,106 @@
     return stav.fonty;
   }
 
-  async function prepsat() {
+  // vrátí { bytes, odstraneno, neodstraneno } nebo { chyba } když není co / kam psát
+  async function vytvorPdf() {
     const { PDFDocument, rgb } = PDFLib;
     const noveRadky = el.adresa.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     const noveDic = el.dic.value.trim();
-    if (!noveRadky.length && !noveDic) { hlaska(el.hlaskaForm, 'Není co přepsat – vyplňte adresu nebo DIČ.', 'chyba'); return; }
-    if (noveRadky.length && !stav.adresa.length) { hlaska(el.hlaskaForm, 'Nevím, kam adresu napsat – označte v náhledu řádky původní adresy.', 'chyba'); return; }
-    if (noveDic && !stav.dic) { hlaska(el.hlaskaForm, 'Nevím, kam DIČ napsat – označte v náhledu řádek s DIČ.', 'chyba'); return; }
-    el.prepsat.disabled = true;
-    hlaska(el.hlaskaForm, 'Přepisuji…', 'info');
+    if (!noveRadky.length && !noveDic) return { chyba: 'Není co přepsat – vyplňte adresu nebo DIČ.' };
+    if (noveRadky.length && !stav.adresa.length) return { chyba: 'Nevím, kam adresu napsat – označte v originálu řádky původní adresy.' };
+    if (noveDic && !stav.dic) return { chyba: 'Nevím, kam DIČ napsat – označte v originálu řádek s DIČ.' };
+
+    const fonty = await nactiFonty();
+    const doc = await PDFDocument.load(stav.bytes, { ignoreEncryption: true });
+    doc.registerFontkit(fontkit);
+    const fRegular = await doc.embedFont(fonty.regular, { subset: true });
+    const fBold = await doc.embedFont(fonty.bold, { subset: true });
+    const page = doc.getPage(0);
+    const bila = rgb(1, 1, 1), cerna = rgb(0, 0, 0);
+    const vlastniVelikost = parseFloat(String(el.velikost.value).replace(',', '.'));
+
+    // 1) původní text odstranit přímo z obsahu PDF (aby nešel označit ani vytěžit)
+    const puv = stav.adresa.map((i) => stav.radky[i]);
+    const oblasti = puv.map((r) => ({ x: r.x, y: r.y, w: r.w, size: r.size }));
+    if (noveDic && stav.dic) { const it = stav.dic.item; oblasti.push({ x: it.x, y: it.y, w: it.w, size: it.size }); }
+    let pocty = oblasti.map(() => 0);
+    try { pocty = await FKObsah.odstranText(doc, page, oblasti); } catch (e) { console.warn('odstranění textu selhalo', e); }
+    const odstraneno = pocty.reduce((a, b) => a + b, 0);
+    const neodstraneno = pocty.filter((n) => !n).length;
+    // 2) kde se text odstranit nepodařilo, aspoň ho překrýt bílou plochou
+    const zabil = (k, x, y, w, size) => { if (k < 0 || !pocty[k]) page.drawRectangle({ x: x - 1.5, y: y - size * 0.28, width: w + 3, height: size * 1.25, color: bila, borderWidth: 0 }); };
+
+    // adresa: nové řádky napsat na místa původních (další pod ně)
+    if (stav.adresa.length) {
+      const size = vlastniVelikost > 0 ? vlastniVelikost : puv[0].size;
+      const krok = puv.length > 1 ? Math.max(size * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : size * 1.25;
+      puv.forEach((r, k) => zabil(k, r.x, r.y, r.w, r.size));
+      const x0 = puv[0].x;
+      noveRadky.forEach((text, k) => {
+        const font = k === 0 && el.tucne.checked ? fBold : fRegular;
+        const y = k < puv.length ? puv[k].y : puv[puv.length - 1].y - krok * (k - puv.length + 1);
+        let x = x0;
+        if (k === 0 && puv[0].predpona) { // popisek („Odběratel: “) napsat znovu před název
+          page.drawText(puv[0].predpona, { x, y, size, font: fRegular, color: cerna });
+          x += fRegular.widthOfTextAtSize(puv[0].predpona, size);
+        }
+        const w = font.widthOfTextAtSize(text, size);
+        const puvW = k < puv.length ? puv[k].x + puv[k].w - x : 0;
+        if (w > puvW + 1) zabil(k < puv.length ? k : -1, x, y, w, size);
+        page.drawText(text, { x, y, size, font, color: cerna });
+      });
+    }
+
+    // DIČ: jen položka s hodnotou, napsaná znovu s novou hodnotou
+    if (noveDic && stav.dic) {
+      const it = stav.dic.item;
+      const size = vlastniVelikost > 0 ? vlastniVelikost : it.size;
+      const novy = it.str.includes(stav.dic.match) ? it.str.replace(stav.dic.match, noveDic) : noveDic;
+      const font = it.bold ? fBold : fRegular;
+      const w = Math.max(it.w, font.widthOfTextAtSize(novy, size));
+      zabil(oblasti.length - 1, it.x, it.y, w, it.size);
+      page.drawText(novy, { x: it.x, y: it.y, size, font, color: cerna });
+    }
+
+    return { bytes: await doc.save(), odstraneno, neodstraneno };
+  }
+
+  /* ---------- živý náhled výsledku ---------- */
+  let casovac = null;
+  function naplanujNahled() {
+    clearTimeout(casovac);
+    casovac = setTimeout(obnovNahled, 350);
+  }
+
+  async function obnovNahled() {
+    if (!stav.bytes) return;
+    const beh = ++stav.generace;
+    el.generuji.textContent = 'generuji…'; el.teckaVysledek.classList.remove('zivy');
     try {
-      const fonty = await nactiFonty();
-      const doc = await PDFDocument.load(stav.bytes, { ignoreEncryption: true });
-      doc.registerFontkit(fontkit);
-      const fRegular = await doc.embedFont(fonty.regular, { subset: true });
-      const fBold = await doc.embedFont(fonty.bold, { subset: true });
-      const page = doc.getPage(0);
-      const bila = rgb(1, 1, 1), cerna = rgb(0, 0, 0);
-      const vlastniVelikost = parseFloat(String(el.velikost.value).replace(',', '.'));
-
-      // 1) původní text odstranit přímo z obsahu PDF (aby nešel označit ani vytěžit)
-      const puv = stav.adresa.map((i) => stav.radky[i]);
-      const oblasti = puv.map((r) => ({ x: r.x, y: r.y, w: r.w, size: r.size }));
-      if (noveDic && stav.dic) { const it = stav.dic.item; oblasti.push({ x: it.x, y: it.y, w: it.w, size: it.size }); }
-      let pocty = oblasti.map(() => 0);
-      try { pocty = await FKObsah.odstranText(doc, page, oblasti); } catch (e) { console.warn('odstranění textu selhalo', e); }
-      const odstraneno = pocty.reduce((a, b) => a + b, 0);
-      const neodstraneno = pocty.filter((n) => !n).length;
-      // 2) kde se text odstranit nepodařilo, aspoň ho překrýt bílou plochou
-      const zabil = (k, x, y, w, size) => { if (k < 0 || !pocty[k]) page.drawRectangle({ x: x - 1.5, y: y - size * 0.28, width: w + 3, height: size * 1.25, color: bila, borderWidth: 0 }); };
-
-      // adresa: nové řádky napsat na místa původních (další pod ně)
-      if (stav.adresa.length) {
-        const size = vlastniVelikost > 0 ? vlastniVelikost : puv[0].size;
-        const krok = puv.length > 1 ? Math.max(size * 1.05, (puv[0].y - puv[puv.length - 1].y) / (puv.length - 1)) : size * 1.25;
-        puv.forEach((r, k) => zabil(k, r.x, r.y, r.w, r.size));
-        const x0 = puv[0].x;
-        noveRadky.forEach((text, k) => {
-          const font = k === 0 && el.tucne.checked ? fBold : fRegular;
-          const y = k < puv.length ? puv[k].y : puv[puv.length - 1].y - krok * (k - puv.length + 1);
-          let x = x0;
-          if (k === 0 && puv[0].predpona) { // popisek („Odběratel: “) napsat znovu před název
-            page.drawText(puv[0].predpona, { x, y, size, font: fRegular, color: cerna });
-            x += fRegular.widthOfTextAtSize(puv[0].predpona, size);
-          }
-          const w = font.widthOfTextAtSize(text, size);
-          const puvW = k < puv.length ? puv[k].x + puv[k].w - x : 0;
-          if (w > puvW + 1) zabil(k < puv.length ? k : -1, x, y, w, size);
-          page.drawText(text, { x, y, size, font, color: cerna });
-        });
+      const v = await vytvorPdf();
+      if (beh !== stav.generace) return; // mezitím přišla další úprava
+      if (v.chyba) {
+        stav.vysledek = null; el.stahnout.disabled = true; el.generuji.textContent = '';
+        hlaska(el.hlaskaForm, v.chyba, 'info');
+        vymazVysledek();
+        return;
       }
-
-      // DIČ: jen položka s hodnotou, napsaná znovu s novou hodnotou
-      if (noveDic && stav.dic) {
-        const it = stav.dic.item;
-        const size = vlastniVelikost > 0 ? vlastniVelikost : it.size;
-        const novy = it.str.includes(stav.dic.match) ? it.str.replace(stav.dic.match, noveDic) : noveDic;
-        const font = it.bold ? fBold : fRegular;
-        const w = Math.max(it.w, font.widthOfTextAtSize(novy, size));
-        zabil(oblasti.length - 1, it.x, it.y, w, it.size);
-        page.drawText(novy, { x: it.x, y: it.y, size, font, color: cerna });
-      }
-
-      const out = await doc.save();
-      const blob = new Blob([out], { type: 'application/pdf' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = stav.nazev.replace(/\.pdf$/i, '') + '-upraveno.pdf';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      hlaska(el.hlaskaForm, 'Hotovo – soubor „' + a.download + '“ se stahuje. ' + (!neodstraneno ? 'Původní text byl z PDF odstraněn.' : odstraneno ? 'Část původního textu se nepodařilo z PDF odstranit, je jen překrytá bílou plochou.' : 'Původní text se nepodařilo z PDF odstranit, je jen překrytý bílou plochou.'), !neodstraneno ? 'ok' : 'chyba');
-      await vykresliVysledek(out);
+      stav.vysledek = { bytes: v.bytes, nazev: stav.nazev.replace(/\.pdf$/i, '') + '-upraveno.pdf' };
+      await vykresliVysledek(v.bytes);
+      if (beh !== stav.generace) return;
+      el.stahnout.disabled = false; el.generuji.textContent = 'aktuální'; el.teckaVysledek.classList.add('zivy');
+      hlaska(el.hlaskaForm, !v.neodstraneno ? 'Náhled je aktuální. Původní text bude z PDF odstraněn.' : v.odstraneno ? 'Část původního textu se nepodařilo z PDF odstranit, bude jen překrytá bílou plochou.' : 'Původní text se nepodařilo z PDF odstranit, bude jen překrytý bílou plochou.', !v.neodstraneno ? 'ok' : 'chyba');
+      kroky(2);
     } catch (e) {
       console.error(e);
-      hlaska(el.hlaskaForm, 'Přepsání se nepovedlo: ' + (e.message || e), 'chyba');
-    } finally {
-      el.prepsat.disabled = false;
+      el.generuji.textContent = '';
+      hlaska(el.hlaskaForm, 'Náhled se nepovedl: ' + (e.message || e), 'chyba');
     }
+  }
+
+  function vymazVysledek() {
+    const c = el.platnoVysledek; const g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
   }
 
   async function vykresliVysledek(bytes) {
@@ -475,23 +615,55 @@
     const viewport = strana.getViewport({ scale: stav.viewport.scale });
     const c = el.platnoVysledek;
     c.width = Math.floor(viewport.width); c.height = Math.floor(viewport.height);
+    c.style.width = c.width + 'px'; c.style.height = 'auto';
     await strana.render({ canvasContext: c.getContext('2d'), viewport }).promise;
-    el.vysledek.classList.remove('skryty');
+  }
+
+  function stahnout() {
+    if (!stav.vysledek) return;
+    const blob = new Blob([stav.vysledek.bytes], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = stav.vysledek.nazev;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    hlaska(el.hlaskaForm, 'Soubor „' + stav.vysledek.nazev + '“ se stahuje.', 'ok');
+    kroky(3);
   }
 
   /* ---------- události ---------- */
   el.soubor.addEventListener('change', () => { if (el.soubor.files[0]) nacti(el.soubor.files[0]); });
-  el.prepsat.addEventListener('click', prepsat);
+  el.jinySoubor.addEventListener('click', () => { el.soubor.value = ''; el.soubor.click(); });
+  el.vyberOdberatele.addEventListener('change', () => {
+    const o = (window.ODBERATELE || [])[Number(el.vyberOdberatele.value)];
+    if (!o) return;
+    el.adresa.value = o.radky.join('\n');
+    el.dic.value = o.dic || '';
+    naplanujNahled();
+  });
+  el.stahnout.addEventListener('click', stahnout);
+  el.rozlozeni.addEventListener('click', () => {
+    const podSebou = el.nahledy.classList.toggle('podSebou');
+    el.rozlozeni.textContent = podSebou ? 'Vedle sebe' : 'Pod sebou (větší)';
+    try { localStorage.setItem('faktura.rozlozeni', podSebou ? 'podSebou' : 'vedleSebe'); } catch (e) { /* bez úložiště */ }
+    vykresliPrekryv();
+  });
+  try { if (localStorage.getItem('faktura.rozlozeni') === 'podSebou') { el.nahledy.classList.add('podSebou'); el.rozlozeni.textContent = 'Vedle sebe'; } } catch (e) { /* bez úložiště */ }
   el.znovuNajit.addEventListener('click', () => { najdiAutomaticky(); vykresliPrekryv(); naplnFormular(); });
   el.zrusitVyber.addEventListener('click', () => { stav.adresa = []; stav.dic = null; vykresliPrekryv(); naplnFormular(); });
   el.rezimy.querySelectorAll('button[data-rezim]').forEach((b) => b.addEventListener('click', () => {
     stav.rezim = b.dataset.rezim;
     el.rezimy.querySelectorAll('button[data-rezim]').forEach((x) => x.classList.toggle('aktivni', x === b));
   }));
+  el.adresa.addEventListener('input', () => { el.vyberOdberatele.value = ''; });
+  el.dic.addEventListener('input', () => { el.vyberOdberatele.value = ''; });
+  ['input', 'change'].forEach((u) => { el.adresa.addEventListener(u, naplanujNahled); el.dic.addEventListener(u, naplanujNahled); el.tucne.addEventListener(u, naplanujNahled); el.velikost.addEventListener(u, naplanujNahled); });
   // přetažení souboru na stránku
-  document.addEventListener('dragover', (e) => { e.preventDefault(); });
-  document.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f && /\.pdf$/i.test(f.name)) nacti(f); });
-  window.addEventListener('resize', () => { if (stav.strana) vykresli(); });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); el.drop.classList.add('tazeni'); });
+  document.addEventListener('dragleave', () => el.drop.classList.remove('tazeni'));
+  document.addEventListener('drop', (e) => { e.preventDefault(); el.drop.classList.remove('tazeni'); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f && /\.pdf$/i.test(f.name)) nacti(f); });
+  let casovacOkna = null;
+  window.addEventListener('resize', () => { if (!stav.strana) return; clearTimeout(casovacOkna); casovacOkna = setTimeout(async () => { await vykresli(); if (stav.vysledek) await vykresliVysledek(stav.vysledek.bytes); }, 200); });
 })();
 </script>
 </body>

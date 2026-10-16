@@ -13,9 +13,14 @@ oba údaje jdou upravit a uloží se nové PDF (`<název>-upraveno.pdf`).
 - Nový text se píše fontem Liberation Sans (česká diakritika). Funguje jen pro textová PDF,
   naskenované obrázky ne.
 
+- Náhled výsledku je hned vedle originálu a přepisuje se sám při každé úpravě; stažení až tlačítkem.
+- **Předvolení odběratelé** – nabídka „Vybrat odběratele“ vyplní adresu i DIČ. Seznam je v `public/odberatele.js`
+  (název, řádky adresy, DIČ); další odběratel = další položka v poli.
+
 ## Soubory
 
 - `public/index.html` – stránka (náhled, rozpoznání, formulář, zápis do PDF)
+- `public/odberatele.js` – předvolení odběratelé pro nabídku ve formuláři
 - `public/prepis-obsahu.js` – odstranění původního textu z obsahového proudu stránky
 - `public/lib/` – pdf.js 3.11.174 (čtení textu, náhled), pdf-lib 1.17.1 + fontkit (zápis); uložené v repozitáři, bez CDN
 - `public/fonts/` – Liberation Sans Regular/Bold (licence SIL OFL)
